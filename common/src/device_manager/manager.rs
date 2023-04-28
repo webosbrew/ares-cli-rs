@@ -1,5 +1,5 @@
 use std::fs;
-use std::fs::{File, remove_file};
+use std::fs::{remove_file, File};
 use std::io::{Error, ErrorKind, Write};
 use std::path::Path;
 
@@ -96,7 +96,12 @@ impl DeviceManager {
         let content = reqwest::blocking::get(format!("http://{}:9991/webos_rsa", address))
             .and_then(|res| res.error_for_status())
             .and_then(|res| res.text())
-            .map_err(|e| Error::new(ErrorKind::Other, format!("Can't request private key: {e:?}")))?;
+            .map_err(|e| {
+                Error::new(
+                    ErrorKind::Other,
+                    format!("Can't request private key: {e:?}"),
+                )
+            })?;
 
         return match SshKey::from_privkey_base64(&content, Some(passphrase)) {
             Ok(_) => Ok(content),

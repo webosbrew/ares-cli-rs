@@ -26,8 +26,12 @@ pub struct App {
 
 impl ListApps for Session {
     fn list_apps(&self) {
-        let resp: ListAppsResponse = self.call("luna://com.webos.applicationManager/dev/listApps",
-                                               LunaEmptyPayload::default(), true)
+        let resp: ListAppsResponse = self
+            .call(
+                "luna://com.webos.applicationManager/dev/listApps",
+                LunaEmptyPayload::default(),
+                true,
+            )
             .unwrap();
         for app in resp.apps {
             println!("{}", app.id);

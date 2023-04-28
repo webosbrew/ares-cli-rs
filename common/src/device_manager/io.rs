@@ -1,8 +1,8 @@
+use home::home_dir;
 use std::fs::{create_dir_all, File};
 use std::io::{BufReader, BufWriter, Error, ErrorKind};
 use std::path::PathBuf;
 use std::{env, fs};
-use home::home_dir;
 
 use serde_json::Value;
 
@@ -54,7 +54,8 @@ pub(crate) fn write(devices: Vec<Device>) -> Result<(), Error> {
 }
 
 pub(crate) fn ssh_dir() -> Result<PathBuf, Error> {
-    return home_dir().map(|d| d.join(".ssh"))
+    return home_dir()
+        .map(|d| d.join(".ssh"))
         .ok_or(Error::new(ErrorKind::NotFound, "SSH directory not found"));
 }
 

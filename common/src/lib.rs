@@ -1,6 +1,6 @@
 pub mod device_manager;
-pub mod session;
 pub mod luna;
+pub mod session;
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right
