@@ -1,0 +1,6 @@
+[workspace]
+members = ["common", "ares-package", "ares-install"]
+
+[patch.crates-io]
+libssh-rs = { git = "https://github.com/mariotaku/libssh-rs.git", rev = "a886967834189fb6ede637c173386ba44f495421" }
+libssh-rs-sys = { git = "https://github.com/mariotaku/libssh-rs.git", rev = "a886967834189fb6ede637c173386ba44f495421", features = ["libz-sys"] }
