@@ -1,28 +1,34 @@
 use std::fmt::Debug;
-use std::io::{BufRead, BufReader, Error as IoError, Read};
+use std::io::{Error as IoError, Error, ErrorKind, Read};
+use std::time::Duration;
 
 use libssh_rs::{Channel, Error as SshError, Session};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::{Error as JsonError, Value};
-
-#[derive(Debug)]
-pub enum LunaError {
-    NotAvailable,
-}
-
-#[derive(Serialize, Default)]
-pub struct LunaEmptyPayload {}
+use crate::session::SessionError;
 
 pub trait Luna {
     fn call<P, R>(&self, uri: &str, payload: P, public: bool) -> Result<R, LunaError>
-        where
-            P: Sized + Serialize,
-            R: DeserializeOwned;
+    where
+        P: Sized + Serialize,
+        R: DeserializeOwned;
 
     fn subscribe<P>(&self, uri: &str, payload: P, public: bool) -> Result<Subscription, LunaError>
-        where
-            P: Sized + Serialize;
+    where
+        P: Sized + Serialize;
+}
+
+#[derive(Debug)]
+pub enum LunaError {
+    Session(SessionError),
+    Io(IoError),
+    NotAvailable,
+}
+
+pub struct Subscription {
+    ch: Channel,
+    buffer: Vec<u8>,
 }
 
 #[derive(Debug)]
@@ -30,36 +36,56 @@ pub struct Message {
     value: Value,
 }
 
-pub struct Subscription {
-    ch: Channel,
-}
+#[derive(Serialize, Default)]
+pub struct LunaEmptyPayload {}
 
 impl Iterator for Subscription {
     type Item = std::io::Result<Message>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        println!("iterator begin call");
         if self.ch.is_closed() || self.ch.is_eof() {
-            println!("iterator finish");
             return None;
         }
-        let stdout = self.ch.stdout();
-        let mut reader = BufReader::new(stdout);
-        let mut line = String::new();
-        if let Err(e) = reader.read_line(&mut line) {
-            return Some(Err(e));
+        let item: serde_json::Result<Value>;
+        loop {
+            let mut buffer = [0; 1024];
+            match self
+                .ch
+                .read_timeout(&mut buffer, false, Some(Duration::from_millis(10)))
+            {
+                Ok(len) => {
+                    self.buffer.extend_from_slice(&buffer[..len]);
+                }
+                Err(e) => {
+                    return Some(Err(Error::new(
+                        ErrorKind::Other,
+                        format!("SSH read error: {e:?}"),
+                    )));
+                }
+            }
+            if self.buffer.is_empty() {
+                continue;
+            }
+            if let Some(idx) = self.buffer.iter().position(|&r| r == b'\n') {
+                item = serde_json::from_slice(&self.buffer[..idx]);
+                self.buffer.drain(..idx + 1);
+                break;
+            }
         }
-        println!("iterator end call: {line}");
-        return Some(Ok(Message { value: serde_json::from_str(line.trim()).unwrap() }));
+        return Some(
+            item.map_err(|e| {
+                Error::new(ErrorKind::InvalidData, format!("Bad JSON response: {e:?}"))
+            })
+            .map(|value| Message { value }),
+        );
     }
 }
 
-
 impl Luna for Session {
     fn call<P, R>(&self, uri: &str, payload: P, public: bool) -> Result<R, LunaError>
-        where
-            P: Sized + Serialize,
-            R: DeserializeOwned,
+    where
+        P: Sized + Serialize,
+        R: DeserializeOwned,
     {
         let ch = self.new_channel()?;
         ch.open_session()?;
@@ -83,8 +109,8 @@ impl Luna for Session {
     }
 
     fn subscribe<P>(&self, uri: &str, payload: P, public: bool) -> Result<Subscription, LunaError>
-        where
-            P: Sized + Serialize
+    where
+        P: Sized + Serialize,
     {
         let ch = self.new_channel()?;
         ch.open_session()?;
@@ -95,24 +121,42 @@ impl Luna for Session {
             "{luna_cmd} -i {uri} {}",
             snailquote::escape(&payload_str)
         ))?;
-        return Ok(Subscription { ch });
+        return Ok(Subscription {
+            ch,
+            buffer: Vec::new(),
+        });
+    }
+}
+
+impl Message {
+    pub fn deserialize<T: DeserializeOwned>(self) -> Result<T, serde_json::Error> {
+        return serde_json::from_value(self.value);
     }
 }
 
 impl From<SshError> for LunaError {
     fn from(value: SshError) -> Self {
-        todo!()
+        return Self::Session(value.into());
+    }
+}
+
+impl From<SessionError> for LunaError {
+    fn from(value: SessionError) -> Self {
+        return Self::Session(value);
     }
 }
 
 impl From<JsonError> for LunaError {
     fn from(value: JsonError) -> Self {
-        panic!("{value:?}")
+        return Self::Io(IoError::new(
+            ErrorKind::InvalidData,
+            format!("Invalid JSON: {value:?}"),
+        ));
     }
 }
 
 impl From<IoError> for LunaError {
     fn from(value: IoError) -> Self {
-        todo!()
+        return Self::Io(value);
     }
 }

@@ -18,17 +18,17 @@ mod input;
 #[command(about)]
 struct Cli {
     #[arg(
-    short,
-    long,
-    value_name = "OUTPUT_DIR",
-    help = "Use OUTPUT_DIR as the output directory"
+        short,
+        long,
+        value_name = "OUTPUT_DIR",
+        help = "Use OUTPUT_DIR as the output directory"
     )]
     outdir: Option<PathBuf>,
     #[arg(
-    short = 'e',
-    long,
-    value_name = "PATTERN",
-    help = "Exclude files, given as a PATTERN"
+        short = 'e',
+        long,
+        value_name = "PATTERN",
+        help = "Exclude files, given as a PATTERN"
     )]
     app_exclude: Vec<String>,
     #[arg(help = "App directory containing a valid appinfo.json file.")]
@@ -85,7 +85,8 @@ impl ServiceInfo {
 fn main() {
     let cli = Cli::parse();
     let app_dir = cli.app_dir;
-    let outdir = cli.outdir
+    let outdir = cli
+        .outdir
         .or_else(|| app_dir.parent().map(|p| p.to_path_buf()))
         .expect("Invalid output directory");
     let path = outdir.join("test.ipk");
@@ -97,19 +98,17 @@ fn main() {
     let mut ar = Builder::new(ipk_file);
     let debian_binary = b"2.0\n".to_vec();
 
-    ar
-        .append(
-            &Header::new(b"debian-binary".to_vec(), debian_binary.len() as u64),
-            debian_binary.deref(),
-        )
-        .unwrap();
+    ar.append(
+        &Header::new(b"debian-binary".to_vec(), debian_binary.len() as u64),
+        debian_binary.deref(),
+    )
+    .unwrap();
     let control = ControlInfo {
         package: package_info.id.clone(),
         version: package_info.version.clone(),
         architecture: format!("arm"),
     };
     ar.append_control(&control).unwrap();
-    ar
-        .append_data(&package_info, &app_dir, &cli.service_dir)
+    ar.append_data(&package_info, &app_dir, &cli.service_dir)
         .unwrap();
 }

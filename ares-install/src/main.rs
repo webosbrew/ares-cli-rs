@@ -3,23 +3,24 @@ use std::process::exit;
 
 use clap::Parser;
 
+use crate::install::InstallError;
 use common::device_manager::DeviceManager;
 use common::session::NewSession;
-use list::ListApps;
 use install::InstallApp;
+use list::ListApps;
 
-mod list;
 mod install;
+mod list;
 
 #[derive(Parser, Debug)]
 #[command(about)]
 struct Cli {
     #[arg(
-    short,
-    long,
-    group = "device_group",
-    value_name = "DEVICE",
-    help = "Specify DEVICE to use"
+        short,
+        long,
+        group = "device_group",
+        value_name = "DEVICE",
+        help = "Specify DEVICE to use"
     )]
     device: Option<String>,
     #[arg(short, long, group = "device_group", help = "Open device chooser")]
@@ -27,17 +28,17 @@ struct Cli {
     #[arg(short, long, group = "action", help = "List the installed apps")]
     list: bool,
     #[arg(
-    short,
-    long,
-    group = "action",
-    value_name = "APP_ID",
-    help = "Remove app with APP_ID"
+        short,
+        long,
+        group = "action",
+        value_name = "APP_ID",
+        help = "Remove app with APP_ID"
     )]
     remove: Option<String>,
     #[arg(
-    value_name = "PACKAGE_FILE",
-    group = "action",
-    help = "webOS package with .ipk extension"
+        value_name = "PACKAGE_FILE",
+        group = "action",
+        help = "webOS package with .ipk extension"
     )]
     package: Option<PathBuf>,
 }
@@ -63,7 +64,13 @@ fn main() {
         println!("Removing {id}...");
     } else if let Some(package) = cli.package {
         println!("Installing {}...", package.to_string_lossy());
-        session.install_app(package);
+        match session.install_app(package) {
+            Ok(package_id) => println!("{package_id} installed."),
+            Err(e) => {
+                eprintln!("{e:?}");
+                exit(1);
+            }
+        }
     } else {
         Cli::parse_from(vec!["", "--help"]);
     }

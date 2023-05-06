@@ -5,8 +5,8 @@ use std::path::Path;
 use std::time::SystemTime;
 
 use ar::{Builder as ArBuilder, Header as ArHeader};
-use flate2::Compression;
 use flate2::write::GzEncoder;
+use flate2::Compression;
 use path_slash::PathExt as _;
 use tar::{Builder as TarBuilder, EntryType, Header as TarHeader};
 
@@ -19,14 +19,14 @@ pub(crate) trait AppendData {
         app_dir: P1,
         service_dirs: &[P2],
     ) -> std::io::Result<()>
-        where
-            P1: AsRef<Path>,
-            P2: AsRef<Path>;
+    where
+        P1: AsRef<Path>,
+        P2: AsRef<Path>;
 }
 
 impl<W> AppendData for ArBuilder<W>
-    where
-        W: IoWrite,
+where
+    W: IoWrite,
 {
     fn append_data<P1, P2>(
         &mut self,
@@ -34,9 +34,9 @@ impl<W> AppendData for ArBuilder<W>
         app_dir: P1,
         service_dirs: &[P2],
     ) -> std::io::Result<()>
-        where
-            P1: AsRef<Path>,
-            P2: AsRef<Path>,
+    where
+        P1: AsRef<Path>,
+        P2: AsRef<Path>,
     {
         let package_info = serde_json::to_vec(info).unwrap();
 
@@ -49,15 +49,25 @@ impl<W> AppendData for ArBuilder<W>
             .unwrap()
             .as_secs();
 
-        mkdirp(&mut tar, &format!("usr/palm/applications/"), Option::<&Path>::None, mtime)?;
+        mkdirp(
+            &mut tar,
+            &format!("usr/palm/applications/"),
+            Option::<&Path>::None,
+            mtime,
+        )?;
         tar.append_dir_all(format!("usr/palm/applications/{}", info.app), app_dir)?;
         for service_dir in service_dirs {
-            let service = ServiceInfo::read_from(File::open(service_dir.as_ref()
-                .join("services.json"))?)?;
+            let service =
+                ServiceInfo::read_from(File::open(service_dir.as_ref().join("services.json"))?)?;
             tar.append_dir_all(format!("usr/palm/services/{}", service.id), service_dir)?;
         }
 
-        mkdirp(&mut tar, &format!("usr/palm/packages/{}/", info.id), Some(Path::new("usr/palm")), mtime)?;
+        mkdirp(
+            &mut tar,
+            &format!("usr/palm/packages/{}/", info.id),
+            Some(Path::new("usr/palm")),
+            mtime,
+        )?;
         let mut header = TarHeader::new_gnu();
         header.set_path(format!("usr/palm/packages/{}/packageinfo.json", info.id))?;
         header.set_mode(0o644);
@@ -74,9 +84,16 @@ impl<W> AppendData for ArBuilder<W>
     }
 }
 
-fn mkdirp<W, P>(tar: &mut TarBuilder<W>, path: P, path_stop: Option<&Path>,
-                mtime: u64) -> std::io::Result<()>
-    where W: Write, P: AsRef<Path> {
+fn mkdirp<W, P>(
+    tar: &mut TarBuilder<W>,
+    path: P,
+    path_stop: Option<&Path>,
+    mtime: u64,
+) -> std::io::Result<()>
+where
+    W: Write,
+    P: AsRef<Path>,
+{
     let mut stack = Vec::new();
     let empty = Vec::<u8>::new();
     let mut p = path.as_ref();
