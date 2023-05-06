@@ -1,10 +1,10 @@
 use std::fmt::Debug;
-use std::io::{Error as IoError, Read};
+use std::io::{BufRead, BufReader, Error as IoError, Read};
 
-use libssh_rs::{Error as SshError, Session};
+use libssh_rs::{Channel, Error as SshError, Session};
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
-use serde_json::Error as JsonError;
+use serde::Serialize;
+use serde_json::{Error as JsonError, Value};
 
 #[derive(Debug)]
 pub enum LunaError {
@@ -16,16 +16,50 @@ pub struct LunaEmptyPayload {}
 
 pub trait Luna {
     fn call<P, R>(&self, uri: &str, payload: P, public: bool) -> Result<R, LunaError>
-    where
-        P: Sized + Serialize,
-        R: DeserializeOwned;
+        where
+            P: Sized + Serialize,
+            R: DeserializeOwned;
+
+    fn subscribe<P>(&self, uri: &str, payload: P, public: bool) -> Result<Subscription, LunaError>
+        where
+            P: Sized + Serialize;
 }
+
+#[derive(Debug)]
+pub struct Message {
+    value: Value,
+}
+
+pub struct Subscription {
+    ch: Channel,
+}
+
+impl Iterator for Subscription {
+    type Item = std::io::Result<Message>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        println!("iterator begin call");
+        if self.ch.is_closed() || self.ch.is_eof() {
+            println!("iterator finish");
+            return None;
+        }
+        let stdout = self.ch.stdout();
+        let mut reader = BufReader::new(stdout);
+        let mut line = String::new();
+        if let Err(e) = reader.read_line(&mut line) {
+            return Some(Err(e));
+        }
+        println!("iterator end call: {line}");
+        return Some(Ok(Message { value: serde_json::from_str(line.trim()).unwrap() }));
+    }
+}
+
 
 impl Luna for Session {
     fn call<P, R>(&self, uri: &str, payload: P, public: bool) -> Result<R, LunaError>
-    where
-        P: Sized + Serialize,
-        R: DeserializeOwned,
+        where
+            P: Sized + Serialize,
+            R: DeserializeOwned,
     {
         let ch = self.new_channel()?;
         ch.open_session()?;
@@ -46,6 +80,22 @@ impl Luna for Session {
             return Ok(serde_json::from_str(&buf)?);
         }
         return Err(LunaError::NotAvailable);
+    }
+
+    fn subscribe<P>(&self, uri: &str, payload: P, public: bool) -> Result<Subscription, LunaError>
+        where
+            P: Sized + Serialize
+    {
+        let ch = self.new_channel()?;
+        ch.open_session()?;
+        let luna_cmd = if public { "luna-send-pub" } else { "luna-send" };
+        let uri = snailquote::escape(uri.into());
+        let payload_str = serde_json::to_string(&payload)?;
+        ch.request_exec(&format!(
+            "{luna_cmd} -i {uri} {}",
+            snailquote::escape(&payload_str)
+        ))?;
+        return Ok(Subscription { ch });
     }
 }
 

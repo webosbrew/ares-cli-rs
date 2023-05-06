@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::process::exit;
 
 use clap::Parser;
@@ -5,18 +6,20 @@ use clap::Parser;
 use common::device_manager::DeviceManager;
 use common::session::NewSession;
 use list::ListApps;
+use install::InstallApp;
 
 mod list;
+mod install;
 
 #[derive(Parser, Debug)]
 #[command(about)]
 struct Cli {
     #[arg(
-        short,
-        long,
-        group = "device_group",
-        value_name = "DEVICE",
-        help = "Specify DEVICE to use"
+    short,
+    long,
+    group = "device_group",
+    value_name = "DEVICE",
+    help = "Specify DEVICE to use"
     )]
     device: Option<String>,
     #[arg(short, long, group = "device_group", help = "Open device chooser")]
@@ -24,19 +27,19 @@ struct Cli {
     #[arg(short, long, group = "action", help = "List the installed apps")]
     list: bool,
     #[arg(
-        short,
-        long,
-        group = "action",
-        value_name = "APP_ID",
-        help = "Remove app with APP_ID"
+    short,
+    long,
+    group = "action",
+    value_name = "APP_ID",
+    help = "Remove app with APP_ID"
     )]
     remove: Option<String>,
     #[arg(
-        value_name = "PACKAGE_FILE",
-        group = "action",
-        help = "webOS package with .ipk extension"
+    value_name = "PACKAGE_FILE",
+    group = "action",
+    help = "webOS package with .ipk extension"
     )]
-    package: Option<String>,
+    package: Option<PathBuf>,
 }
 
 fn main() {
@@ -59,7 +62,8 @@ fn main() {
     } else if let Some(id) = cli.remove {
         println!("Removing {id}...");
     } else if let Some(package) = cli.package {
-        println!("Installing {package}...");
+        println!("Installing {}...", package.to_string_lossy());
+        session.install_app(package);
     } else {
         Cli::parse_from(vec!["", "--help"]);
     }

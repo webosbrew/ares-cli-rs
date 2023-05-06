@@ -1,6 +1,7 @@
+use std::fs::File;
 use std::io::{Cursor, Write as IoWrite, Write};
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::SystemTime;
 
 use ar::{Builder as ArBuilder, Header as ArHeader};
@@ -9,7 +10,7 @@ use flate2::write::GzEncoder;
 use path_slash::PathExt as _;
 use tar::{Builder as TarBuilder, EntryType, Header as TarHeader};
 
-use crate::PackageInfo;
+use crate::{PackageInfo, ServiceInfo};
 
 pub(crate) trait AppendData {
     fn append_data<P1, P2>(
@@ -48,8 +49,13 @@ impl<W> AppendData for ArBuilder<W>
             .unwrap()
             .as_secs();
 
-        mkdirp(&mut tar, &format!("usr/palm/applications"), Option::<&Path>::None, mtime)?;
+        mkdirp(&mut tar, &format!("usr/palm/applications/"), Option::<&Path>::None, mtime)?;
         tar.append_dir_all(format!("usr/palm/applications/{}", info.app), app_dir)?;
+        for service_dir in service_dirs {
+            let service = ServiceInfo::read_from(File::open(service_dir.as_ref()
+                .join("services.json"))?)?;
+            tar.append_dir_all(format!("usr/palm/services/{}", service.id), service_dir)?;
+        }
 
         mkdirp(&mut tar, &format!("usr/palm/packages/{}/", info.id), Some(Path::new("usr/palm")), mtime)?;
         let mut header = TarHeader::new_gnu();
@@ -72,19 +78,18 @@ fn mkdirp<W, P>(tar: &mut TarBuilder<W>, path: P, path_stop: Option<&Path>,
                 mtime: u64) -> std::io::Result<()>
     where W: Write, P: AsRef<Path> {
     let mut stack = Vec::new();
-    let mut path = path.as_ref();
     let empty = Vec::<u8>::new();
-    while let Some(p) = path.parent() {
-        if p == Path::new("") {
-            break;
-        }
+    let mut p = path.as_ref();
+    while p != Path::new("") {
         if let Some(s) = path_stop {
             if p == s {
                 break;
             }
         }
         stack.insert(0, p);
-        path = p;
+        if let Some(parent) = p.parent() {
+            p = parent;
+        }
     }
     for p in stack {
         let mut header = TarHeader::new_gnu();

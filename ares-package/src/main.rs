@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::io::{Error, ErrorKind, Read};
 use std::ops::Deref;
 use std::path::PathBuf;
 
@@ -22,7 +23,7 @@ struct Cli {
     value_name = "OUTPUT_DIR",
     help = "Use OUTPUT_DIR as the output directory"
     )]
-    outdir: Option<String>,
+    outdir: Option<PathBuf>,
     #[arg(
     short = 'e',
     long,
@@ -31,9 +32,9 @@ struct Cli {
     )]
     app_exclude: Vec<String>,
     #[arg(help = "App directory containing a valid appinfo.json file.")]
-    app_dir: String,
+    app_dir: PathBuf,
     #[arg(help = "Directory containing a valid services.json file")]
-    service_dir: Vec<String>,
+    service_dir: Vec<PathBuf>,
 }
 
 #[derive(Debug, Serialize)]
@@ -53,25 +54,44 @@ pub(crate) struct AppInfo {
     pub vendor: Option<String>,
 }
 
+impl AppInfo {
+    fn read_from<R: Read>(reader: R) -> std::io::Result<AppInfo> {
+        return serde_json::from_reader(reader).map_err(|e| {
+            Error::new(
+                ErrorKind::InvalidData,
+                format!("Invalid appinfo.json: {e:?}"),
+            )
+        });
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub(crate) struct ServiceInfo {
     pub id: String,
     pub description: Option<String>,
 }
 
+impl ServiceInfo {
+    fn read_from<R: Read>(reader: R) -> std::io::Result<ServiceInfo> {
+        return serde_json::from_reader(reader).map_err(|e| {
+            Error::new(
+                ErrorKind::InvalidData,
+                format!("Invalid services.json: {e:?}"),
+            )
+        });
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
-    let app_dir = PathBuf::from(&cli.app_dir);
-    let outdir = cli
-        .outdir
-        .map(|outdir| PathBuf::from(outdir))
+    let app_dir = cli.app_dir;
+    let outdir = cli.outdir
         .or_else(|| app_dir.parent().map(|p| p.to_path_buf()))
         .expect("Invalid output directory");
     let path = outdir.join("test.ipk");
     println!("Packaging {}...", path.to_string_lossy());
 
-    let service_dirs: Vec<PathBuf> = cli.service_dir.iter().map(|s| PathBuf::from(s)).collect();
-    let package_info = PackageInfo::from_input(&app_dir, &service_dirs).unwrap();
+    let package_info = PackageInfo::from_input(&app_dir, &cli.service_dir).unwrap();
 
     let ipk_file = File::create(path).unwrap();
     let mut ar = Builder::new(ipk_file);
@@ -90,6 +110,6 @@ fn main() {
     };
     ar.append_control(&control).unwrap();
     ar
-        .append_data(&package_info, &app_dir, &service_dirs)
+        .append_data(&package_info, &app_dir, &cli.service_dir)
         .unwrap();
 }

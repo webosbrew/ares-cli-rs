@@ -5,18 +5,18 @@ use std::io::Error as IoError;
 use std::time::Duration;
 
 pub trait NewSession {
-    fn new_session(&self) -> Result<Session, NewSessionError>;
+    fn new_session(&self) -> Result<Session, SessionError>;
 }
 
 #[derive(Debug)]
-pub enum NewSessionError {
+pub enum SessionError {
     Io(IoError),
     LibSsh(SshError),
     Authorization { message: String },
 }
 
 impl NewSession for Device {
-    fn new_session(&self) -> Result<Session, NewSessionError> {
+    fn new_session(&self) -> Result<Session, SessionError> {
         let session = Session::new()?;
         session.set_option(SshOption::Timeout(Duration::from_secs(10)))?;
         session.set_option(SshOption::Hostname(self.host.clone()))?;
@@ -45,18 +45,18 @@ impl NewSession for Device {
             let priv_key = SshKey::from_privkey_base64(&priv_key_content, passphrase.as_deref())?;
 
             if session.userauth_publickey(None, &priv_key)? != AuthStatus::Success {
-                return Err(NewSessionError::Authorization {
+                return Err(SessionError::Authorization {
                     message: format!("Key authorization failed"),
                 });
             }
         } else if let Some(password) = &self.password {
             if session.userauth_password(None, Some(password))? != AuthStatus::Success {
-                return Err(NewSessionError::Authorization {
+                return Err(SessionError::Authorization {
                     message: format!("Bad SSH password"),
                 });
             }
         } else if session.userauth_none(None)? != AuthStatus::Success {
-            return Err(NewSessionError::Authorization {
+            return Err(SessionError::Authorization {
                 message: format!("Host needs authorization"),
             });
         }
@@ -64,14 +64,14 @@ impl NewSession for Device {
     }
 }
 
-impl From<SshError> for NewSessionError {
+impl From<SshError> for SessionError {
     fn from(value: SshError) -> Self {
-        NewSessionError::LibSsh(value)
+        SessionError::LibSsh(value)
     }
 }
 
-impl From<IoError> for NewSessionError {
+impl From<IoError> for SessionError {
     fn from(value: IoError) -> Self {
-        NewSessionError::Io(value)
+        SessionError::Io(value)
     }
 }
