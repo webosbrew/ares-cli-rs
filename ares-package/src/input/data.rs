@@ -45,7 +45,7 @@ impl DataInfo {
             package: PackageInfo {
                 id: app_info.id.clone(),
                 version: app_info.version.clone(),
-                app: app_info.version.clone(),
+                app: app_info.id.clone(),
                 services: services.iter().map(|info| info.info.id.clone()).collect(),
             },
             app: ComponentInfo {

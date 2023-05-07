@@ -1,7 +1,6 @@
 use std::io::{Cursor, Result, Write as IoWrite, Write};
 use std::ops::Deref;
 use std::path::Path;
-use std::time::SystemTime;
 
 use ar::{Builder as ArBuilder, Header as ArHeader};
 use flate2::write::GzEncoder;
@@ -12,25 +11,20 @@ use tar::{Builder as TarBuilder, EntryType, Header as TarHeader};
 use crate::input::data::DataInfo;
 
 pub trait AppendData {
-    fn append_data(&mut self, details: &DataInfo) -> Result<()>;
+    fn append_data(&mut self, details: &DataInfo, mtime: u64) -> Result<()>;
 }
 
 impl<W> AppendData for ArBuilder<W>
 where
     W: IoWrite,
 {
-    fn append_data(&mut self, details: &DataInfo) -> Result<()> {
+    fn append_data(&mut self, details: &DataInfo, mtime: u64) -> Result<()> {
         let info = &details.package;
         let package_info = serde_json::to_vec(&info).unwrap();
 
         let mut data_tar_gz = Vec::<u8>::new();
         let gz = GzEncoder::new(&mut data_tar_gz, Compression::default());
         let mut tar = TarBuilder::new(gz);
-
-        let mtime = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
 
         mkdirp(
             &mut tar,
@@ -55,19 +49,19 @@ where
             Some(Path::new("usr/palm")),
             mtime,
         )?;
-        let mut header = TarHeader::new_gnu();
-        header.set_path(format!("usr/palm/packages/{}/packageinfo.json", info.id))?;
-        header.set_mode(0o644);
-        header.set_size(package_info.len() as u64);
-        header.set_mtime(mtime);
-        header.set_cksum();
-        tar.append(&header, package_info.deref())?;
-
+        let mut tar_header = TarHeader::new_gnu();
+        tar_header.set_path(format!("usr/palm/packages/{}/packageinfo.json", info.id))?;
+        tar_header.set_mode(0o100644);
+        tar_header.set_size(package_info.len() as u64);
+        tar_header.set_mtime(mtime);
+        tar_header.set_cksum();
+        tar.append(&tar_header, package_info.deref())?;
         drop(tar);
-        return self.append(
-            &ArHeader::new(b"data.tar.gz".to_vec(), data_tar_gz.len() as u64),
-            Cursor::new(data_tar_gz),
-        );
+
+        let mut ar_header = ArHeader::new(b"data.tar.gz".to_vec(), data_tar_gz.len() as u64);
+        ar_header.set_mode(0o100644);
+        ar_header.set_mtime(mtime);
+        return self.append(&ar_header, Cursor::new(data_tar_gz));
     }
 }
 
@@ -99,8 +93,10 @@ where
         let mut header = TarHeader::new_gnu();
         header.set_path(format!("{}/", p.to_slash_lossy()))?;
         header.set_entry_type(EntryType::Directory);
-        header.set_mode(0o755);
+        header.set_mode(0o100755);
         header.set_size(0);
+        header.set_uid(0);
+        header.set_gid(0);
         header.set_mtime(mtime);
         header.set_cksum();
         tar.append(&header, empty.deref())?;

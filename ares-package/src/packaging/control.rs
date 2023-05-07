@@ -15,30 +15,31 @@ pub struct ControlInfo {
 }
 
 pub trait AppendControl {
-    fn append_control(&mut self, info: &ControlInfo) -> std::io::Result<()>;
+    fn append_control(&mut self, info: &ControlInfo, mtime: u64) -> std::io::Result<()>;
 }
 
 impl<W> AppendControl for ArBuilder<W>
 where
     W: IoWrite,
 {
-    fn append_control(&mut self, info: &ControlInfo) -> std::io::Result<()> {
+    fn append_control(&mut self, info: &ControlInfo, mtime: u64) -> std::io::Result<()> {
         let control = info.to_string().into_bytes();
 
         let mut control_tar_gz = Vec::<u8>::new();
         let gz = GzEncoder::new(&mut control_tar_gz, Compression::default());
-        let mut builder = TarBuilder::new(gz);
+        let mut tar = TarBuilder::new(gz);
 
-        let mut header = TarHeader::new_gnu();
-        header.set_mode(0o644);
-        header.set_size(control.len() as u64);
-        header.set_cksum();
-        builder.append_data(&mut header, "control", control.deref())?;
-        drop(builder);
-        return self.append(
-            &ArHeader::new(b"control.tar.gz".to_vec(), control_tar_gz.len() as u64),
-            Cursor::new(control_tar_gz),
-        );
+        let mut tar_header = TarHeader::new_gnu();
+        tar_header.set_mode(0o100644);
+        tar_header.set_size(control.len() as u64);
+        tar_header.set_cksum();
+        tar.append_data(&mut tar_header, "control", control.deref())?;
+        drop(tar);
+
+        let mut ar_header = ArHeader::new(b"control.tar.gz".to_vec(), control_tar_gz.len() as u64);
+        ar_header.set_mode(0o100644);
+        ar_header.set_mtime(mtime);
+        return self.append(&ar_header, Cursor::new(control_tar_gz));
     }
 }
 

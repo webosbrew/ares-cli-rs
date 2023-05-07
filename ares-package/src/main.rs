@@ -2,6 +2,7 @@ use std::fmt::Debug;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
+use std::time::SystemTime;
 
 use ar::Builder;
 use clap::Parser;
@@ -73,13 +74,18 @@ fn main() {
     let ipk_file = File::create(path).unwrap();
     let mut ar = Builder::new(ipk_file);
 
-    ar.append_header().unwrap();
+    let mtime = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    ar.append_header(mtime).unwrap();
     let control = ControlInfo {
         package: package_info.id.clone(),
         version: package_info.version.clone(),
         installed_size: validation.size,
         architecture: arch,
     };
-    ar.append_control(&control).unwrap();
-    ar.append_data(&data).unwrap();
+    ar.append_control(&control, mtime).unwrap();
+    ar.append_data(&data, mtime).unwrap();
 }
