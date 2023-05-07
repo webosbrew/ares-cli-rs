@@ -61,7 +61,7 @@ fn main() {
         .or_else(|| app_dir.parent().map(|p| p.to_path_buf()))
         .expect("Invalid output directory");
 
-    let data = DataInfo::from_input(&app_dir, &cli.service_dir).unwrap();
+    let data = DataInfo::from_input(&app_dir, &cli.service_dir, &cli.app_exclude).unwrap();
     let package_info = &data.package;
     let validation = data.validate().unwrap();
     let arch = validation.arch.unwrap_or_else(|| String::from("all"));

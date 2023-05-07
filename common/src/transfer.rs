@@ -22,7 +22,7 @@ pub enum TransferError {
 
 impl FileTransfer for Session {
     fn put<P: AsRef<Path>, R: Read>(&self, source: &mut R, target: P) -> Result<(), TransferError> {
-        println!("Copying file to {}...", target.as_ref().to_slash_lossy());
+        println!("Writing file to {}...", target.as_ref().to_slash_lossy());
         let ch = self.new_channel()?;
         ch.open_session()?;
         ch.request_exec(&format!(
@@ -31,8 +31,15 @@ impl FileTransfer for Session {
         ))?;
         std::io::copy(source, &mut ch.stdin())?;
         ch.send_eof()?;
+        let result_code = ch.get_exit_status().unwrap_or(0) as i32;
         ch.close()?;
-        println!("Copied!");
+        if result_code != 0 {
+            return Err(TransferError::ExitCode {
+                code: result_code,
+                reason: format!("cat command exited with status {result_code}"),
+            });
+        }
+        println!("Finish writing file {}.", target.as_ref().to_slash_lossy());
         return Ok(());
     }
 
@@ -41,7 +48,24 @@ impl FileTransfer for Session {
         source: P,
         target: &mut W,
     ) -> Result<(), TransferError> {
-        todo!()
+        println!("Reading file from {}...", source.as_ref().to_slash_lossy());
+        let ch = self.new_channel()?;
+        ch.open_session()?;
+        ch.request_exec(&format!(
+            "cat {}",
+            snailquote::escape(source.as_ref().to_slash_lossy().as_ref())
+        ))?;
+        std::io::copy(&mut ch.stdout(), target)?;
+        let result_code = ch.get_exit_status().unwrap_or(0) as i32;
+        ch.close()?;
+        if result_code != 0 {
+            return Err(TransferError::ExitCode {
+                code: result_code,
+                reason: format!("cat command exited with status {result_code}"),
+            });
+        }
+        println!("Finished reading file {}.", source.as_ref().to_slash_lossy());
+        return Ok(());
     }
 
     fn rm<P: AsRef<Path>>(&self, path: P) -> Result<(), TransferError> {
@@ -53,8 +77,15 @@ impl FileTransfer for Session {
             snailquote::escape(path.as_ref().to_slash_lossy().as_ref())
         ))?;
         ch.send_eof()?;
+        let result_code = ch.get_exit_status().unwrap_or(0) as i32;
         ch.close()?;
-        println!("Removed!");
+        if result_code != 0 {
+            return Err(TransferError::ExitCode {
+                code: result_code,
+                reason: format!("rm command exited with status {result_code}"),
+            });
+        }
+        println!("File {} removed!", path.as_ref().to_slash_lossy());
         return Ok(());
     }
 }

@@ -3,34 +3,58 @@ use std::fs::File;
 use std::io::{Error, ErrorKind, Result};
 use std::path::{Path, PathBuf};
 
-use crate::{PackageInfo, ParseFrom};
+use regex::Regex;
+
 use crate::input::app::AppInfo;
 use crate::input::service::ServiceInfo;
 use crate::input::validation::{Validation, ValidationInfo};
+use crate::{PackageInfo, ParseFrom};
 
 #[derive(Debug)]
 pub struct DataInfo {
     pub package: PackageInfo,
+    pub package_data: Vec<u8>,
     pub app: ComponentInfo<AppInfo>,
     pub services: Vec<ComponentInfo<ServiceInfo>>,
+    pub excludes: Option<Regex>,
 }
 
 #[derive(Debug)]
 pub struct ComponentInfo<T> {
     pub path: PathBuf,
     pub info: T,
-    pub size: usize,
+    pub excludes: Option<Regex>,
 }
 
 impl DataInfo {
-    pub fn from_input<P1, P2>(app_dir: P1, service_dirs: &[P2]) -> Result<DataInfo>
+    pub fn from_input<P1, P2, E>(
+        app_dir: P1,
+        service_dirs: &[P2],
+        excludes: &[E],
+    ) -> Result<DataInfo>
     where
         P1: AsRef<Path>,
         P2: AsRef<Path>,
+        E: AsRef<str>,
     {
         let app_dir = app_dir.as_ref();
         let app_info: AppInfo = AppInfo::parse_from(File::open(app_dir.join("appinfo.json"))?)?;
         let mut services: Vec<ComponentInfo<ServiceInfo>> = Vec::new();
+        let mut exclude_queries = Vec::<String>::new();
+        for pattern in excludes {
+            let mut pattern = String::from(pattern.as_ref());
+            if pattern.starts_with(".") {
+                pattern = pattern.replacen(".", "^\\.", 1);
+            } else if pattern.starts_with("*") {
+                pattern = pattern.replacen("*", "", 1);
+            }
+            pattern.push('$');
+            exclude_queries.push(pattern);
+        }
+        let mut excludes: Option<Regex> = None;
+        if !exclude_queries.is_empty() {
+            excludes = Regex::new(&format!("(?i){}", exclude_queries.join("|"))).ok();
+        }
         for service_dir in service_dirs {
             let service_dir = service_dir.as_ref();
             let service_info =
@@ -38,22 +62,27 @@ impl DataInfo {
             services.push(ComponentInfo {
                 path: service_dir.to_path_buf(),
                 info: service_info,
-                size: fs_extra::dir::get_size(service_dir).unwrap() as usize,
+                excludes: excludes.clone(),
             });
         }
+        let package_info = PackageInfo {
+            id: app_info.id.clone(),
+            version: app_info.version.clone(),
+            app: app_info.id.clone(),
+            services: services.iter().map(|info| info.info.id.clone()).collect(),
+        };
+        let mut package_info_data = serde_json::to_vec_pretty(&package_info).unwrap();
+        package_info_data.push(b'\n');
         return Ok(DataInfo {
-            package: PackageInfo {
-                id: app_info.id.clone(),
-                version: app_info.version.clone(),
-                app: app_info.id.clone(),
-                services: services.iter().map(|info| info.info.id.clone()).collect(),
-            },
+            package: package_info,
+            package_data: package_info_data,
             app: ComponentInfo {
                 path: app_dir.to_path_buf(),
                 info: app_info,
-                size: fs_extra::dir::get_size(app_dir).unwrap() as usize,
+                excludes: excludes.clone(),
             },
             services,
+            excludes,
         });
     }
 }
@@ -62,7 +91,7 @@ impl Validation for DataInfo {
     fn validate(&self) -> Result<ValidationInfo> {
         let app_validation = self.app.validate()?;
         let mut archs = HashSet::<String>::new();
-        let mut size_sum = 0;
+        let mut size_sum = self.package_data.len() as u64;
         if let Some(arch) = &app_validation.arch {
             archs.insert(arch.clone());
         }

@@ -10,7 +10,7 @@ use tar::{Builder as TarBuilder, Header as TarHeader};
 pub struct ControlInfo {
     pub package: String,
     pub version: String,
-    pub installed_size: usize,
+    pub installed_size: u64,
     pub architecture: String,
 }
 

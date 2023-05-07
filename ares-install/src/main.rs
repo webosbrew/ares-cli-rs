@@ -78,7 +78,7 @@ fn main() {
         match session.install_app(package) {
             Ok(package_id) => println!("{package_id} installed."),
             Err(e) => {
-                eprintln!("{e:?}");
+                eprintln!("Failed to install: {e:?}");
                 exit(1);
             }
         }
