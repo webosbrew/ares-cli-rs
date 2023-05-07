@@ -1,18 +1,20 @@
+use std::fmt::Debug;
 use std::fs::File;
-use std::io::{Error, ErrorKind, Read};
-use std::ops::Deref;
+use std::io::Read;
 use std::path::PathBuf;
 
-use ar::{Builder, Header};
+use ar::Builder;
 use clap::Parser;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
-use crate::control::{AppendControl, ControlInfo};
-use crate::data::AppendData;
+use crate::input::data::DataInfo;
+use crate::input::validation::Validation;
+use crate::packaging::control::{AppendControl, ControlInfo};
+use crate::packaging::data::AppendData;
+use crate::packaging::header::AppendHeader;
 
-mod control;
-mod data;
 mod input;
+mod packaging;
 
 #[derive(Parser, Debug)]
 #[command(about)]
@@ -38,48 +40,16 @@ struct Cli {
 }
 
 #[derive(Debug, Serialize)]
-struct PackageInfo {
-    app: String,
+pub struct PackageInfo {
     id: String,
-    services: Vec<String>,
     version: String,
+    app: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    services: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
-pub(crate) struct AppInfo {
-    pub id: String,
-    pub version: String,
-    pub r#type: String,
-    pub title: String,
-    pub vendor: Option<String>,
-}
-
-impl AppInfo {
-    fn read_from<R: Read>(reader: R) -> std::io::Result<AppInfo> {
-        return serde_json::from_reader(reader).map_err(|e| {
-            Error::new(
-                ErrorKind::InvalidData,
-                format!("Invalid appinfo.json: {e:?}"),
-            )
-        });
-    }
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct ServiceInfo {
-    pub id: String,
-    pub description: Option<String>,
-}
-
-impl ServiceInfo {
-    fn read_from<R: Read>(reader: R) -> std::io::Result<ServiceInfo> {
-        return serde_json::from_reader(reader).map_err(|e| {
-            Error::new(
-                ErrorKind::InvalidData,
-                format!("Invalid services.json: {e:?}"),
-            )
-        });
-    }
+pub trait ParseFrom: Sized {
+    fn parse_from<R: Read>(reader: R) -> std::io::Result<Self>;
 }
 
 fn main() {
@@ -89,26 +59,27 @@ fn main() {
         .outdir
         .or_else(|| app_dir.parent().map(|p| p.to_path_buf()))
         .expect("Invalid output directory");
-    let path = outdir.join("test.ipk");
+
+    let data = DataInfo::from_input(&app_dir, &cli.service_dir).unwrap();
+    let package_info = &data.package;
+    let validation = data.validate().unwrap();
+    let arch = validation.arch.unwrap_or_else(|| String::from("all"));
+
+    let path = outdir.join(format!(
+        "{}_{}_{}.ipk",
+        package_info.id, package_info.version, arch
+    ));
     println!("Packaging {}...", path.to_string_lossy());
-
-    let package_info = PackageInfo::from_input(&app_dir, &cli.service_dir).unwrap();
-
     let ipk_file = File::create(path).unwrap();
     let mut ar = Builder::new(ipk_file);
-    let debian_binary = b"2.0\n".to_vec();
 
-    ar.append(
-        &Header::new(b"debian-binary".to_vec(), debian_binary.len() as u64),
-        debian_binary.deref(),
-    )
-    .unwrap();
+    ar.append_header().unwrap();
     let control = ControlInfo {
         package: package_info.id.clone(),
         version: package_info.version.clone(),
-        architecture: format!("arm"),
+        installed_size: validation.size,
+        architecture: arch,
     };
     ar.append_control(&control).unwrap();
-    ar.append_data(&package_info, &app_dir, &cli.service_dir)
-        .unwrap();
+    ar.append_data(&data).unwrap();
 }

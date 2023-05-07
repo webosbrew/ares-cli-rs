@@ -91,12 +91,18 @@ version = "0.1.0"
 dependencies = [
  "ar",
  "clap",
+ "elf",
  "flate2",
+ "fs_extra",
  "path-slash",
  "serde",
  "serde_json",
  "tar",
 ]
+
+[[package]]
+name = "ares-push"
+version = "0.1.0"
 
 [[package]]
 name = "autocfg"
@@ -206,6 +212,8 @@ dependencies = [
  "libssh-rs",
  "libssh-rs-sys",
  "log",
+ "openssl",
+ "openssl-sys",
  "path-slash",
  "pathdiff",
  "reqwest",
@@ -267,6 +275,12 @@ dependencies = [
  "block-buffer",
  "crypto-common",
 ]
+
+[[package]]
+name = "elf"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2b183d6ce6ca4cf30e3db37abf5b52568b5f9015c97d9fbdd7026aa5dcdd758"
 
 [[package]]
 name = "encoding_rs"
@@ -358,6 +372,12 @@ checksum = "a9c384f161156f5260c24a097c56119f9be8c798586aecc13afbcbe7b7e26bf8"
 dependencies = [
  "percent-encoding",
 ]
+
+[[package]]
+name = "fs_extra"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
 
 [[package]]
 name = "futures-channel"
@@ -637,7 +657,7 @@ checksum = "6a987beff54b60ffa6d51982e1aa1146bc42f19bd26be28b0586f252fccf5317"
 [[package]]
 name = "libssh-rs"
 version = "0.1.8"
-source = "git+https://github.com/mariotaku/libssh-rs.git?rev=a886967834189fb6ede637c173386ba44f495421#a886967834189fb6ede637c173386ba44f495421"
+source = "git+https://github.com/wez/libssh-rs.git?rev=74d845c1696b710b8b8388e193b3882c15edf2c1#74d845c1696b710b8b8388e193b3882c15edf2c1"
 dependencies = [
  "bitflags",
  "libssh-rs-sys",
@@ -648,11 +668,24 @@ dependencies = [
 [[package]]
 name = "libssh-rs-sys"
 version = "0.1.3"
-source = "git+https://github.com/mariotaku/libssh-rs.git?rev=a886967834189fb6ede637c173386ba44f495421#a886967834189fb6ede637c173386ba44f495421"
+source = "git+https://github.com/wez/libssh-rs.git?rev=74d845c1696b710b8b8388e193b3882c15edf2c1#74d845c1696b710b8b8388e193b3882c15edf2c1"
 dependencies = [
  "cc",
+ "libz-sys",
  "openssl-sys",
  "pkg-config",
+]
+
+[[package]]
+name = "libz-sys"
+version = "1.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56ee889ecc9568871456d42f603d6a0ce59ff328d291063a45cbdf0036baf6db"
+dependencies = [
+ "cc",
+ "libc",
+ "pkg-config",
+ "vcpkg",
 ]
 
 [[package]]
@@ -739,28 +772,16 @@ checksum = "b7e5500299e16ebb147ae15a00a942af264cf3688f47923b8fc2cd5858f23ad3"
 
 [[package]]
 name = "openssl"
-version = "0.10.39"
+version = "0.10.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28f3916d46d9d813a62d7b7d2724d7b14785ac999fb623d990ee4603f9122742"
+checksum = "549430950c79ae24e6d02e0b7404534ecf311d94cc9f861e9e4020187d13d885"
 dependencies = [
  "bitflags",
  "cfg-if",
  "foreign-types",
  "libc",
  "once_cell",
- "openssl-macros",
  "openssl-sys",
-]
-
-[[package]]
-name = "openssl-macros"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.15",
 ]
 
 [[package]]

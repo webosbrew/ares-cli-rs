@@ -1,5 +1,4 @@
-use std::fs::File;
-use std::io::{Cursor, Write as IoWrite, Write};
+use std::io::{Cursor, Result, Write as IoWrite, Write};
 use std::ops::Deref;
 use std::path::Path;
 use std::time::SystemTime;
@@ -10,35 +9,19 @@ use flate2::Compression;
 use path_slash::PathExt as _;
 use tar::{Builder as TarBuilder, EntryType, Header as TarHeader};
 
-use crate::{PackageInfo, ServiceInfo};
+use crate::input::data::DataInfo;
 
-pub(crate) trait AppendData {
-    fn append_data<P1, P2>(
-        &mut self,
-        info: &PackageInfo,
-        app_dir: P1,
-        service_dirs: &[P2],
-    ) -> std::io::Result<()>
-    where
-        P1: AsRef<Path>,
-        P2: AsRef<Path>;
+pub trait AppendData {
+    fn append_data(&mut self, details: &DataInfo) -> Result<()>;
 }
 
 impl<W> AppendData for ArBuilder<W>
 where
     W: IoWrite,
 {
-    fn append_data<P1, P2>(
-        &mut self,
-        info: &PackageInfo,
-        app_dir: P1,
-        service_dirs: &[P2],
-    ) -> std::io::Result<()>
-    where
-        P1: AsRef<Path>,
-        P2: AsRef<Path>,
-    {
-        let package_info = serde_json::to_vec(info).unwrap();
+    fn append_data(&mut self, details: &DataInfo) -> Result<()> {
+        let info = &details.package;
+        let package_info = serde_json::to_vec(&info).unwrap();
 
         let mut data_tar_gz = Vec::<u8>::new();
         let gz = GzEncoder::new(&mut data_tar_gz, Compression::default());
@@ -55,11 +38,15 @@ where
             Option::<&Path>::None,
             mtime,
         )?;
-        tar.append_dir_all(format!("usr/palm/applications/{}", info.app), app_dir)?;
-        for service_dir in service_dirs {
-            let service =
-                ServiceInfo::read_from(File::open(service_dir.as_ref().join("services.json"))?)?;
-            tar.append_dir_all(format!("usr/palm/services/{}", service.id), service_dir)?;
+        tar.append_dir_all(
+            format!("usr/palm/applications/{}", info.app),
+            &details.app.path,
+        )?;
+        for service in &details.services {
+            tar.append_dir_all(
+                format!("usr/palm/services/{}", &service.info.id),
+                &service.path,
+            )?;
         }
 
         mkdirp(
@@ -89,7 +76,7 @@ fn mkdirp<W, P>(
     path: P,
     path_stop: Option<&Path>,
     mtime: u64,
-) -> std::io::Result<()>
+) -> Result<()>
 where
     W: Write,
     P: AsRef<Path>,

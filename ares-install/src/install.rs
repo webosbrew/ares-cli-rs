@@ -8,8 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Error as JsonError;
 
 use common::luna::{Luna, LunaError};
-use common::session::SessionError;
-use common::transfer::FileTransfer;
+use common::transfer::{FileTransfer, TransferError};
 
 pub(crate) trait InstallApp {
     fn install_app<P: AsRef<Path>>(&self, package: P) -> Result<String, InstallError>;
@@ -19,8 +18,8 @@ pub(crate) trait InstallApp {
 pub enum InstallError {
     Response { error_code: i32, reason: String },
     Luna(LunaError),
+    Transfer(TransferError),
     Io(IoError),
-    Session(SessionError),
 }
 
 #[derive(Serialize, Debug)]
@@ -109,15 +108,15 @@ impl InstallApp for Session {
     }
 }
 
-impl From<SessionError> for InstallError {
-    fn from(value: SessionError) -> Self {
-        Self::Session(value)
-    }
-}
-
 impl From<LunaError> for InstallError {
     fn from(value: LunaError) -> Self {
         Self::Luna(value)
+    }
+}
+
+impl From<TransferError> for InstallError {
+    fn from(value: TransferError) -> Self {
+        Self::Transfer(value)
     }
 }
 

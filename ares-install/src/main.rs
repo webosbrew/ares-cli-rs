@@ -3,7 +3,6 @@ use std::process::exit;
 
 use clap::Parser;
 
-use crate::install::InstallError;
 use common::device_manager::DeviceManager;
 use common::session::NewSession;
 use install::InstallApp;
@@ -63,7 +62,19 @@ fn main() {
     } else if let Some(id) = cli.remove {
         println!("Removing {id}...");
     } else if let Some(package) = cli.package {
-        println!("Installing {}...", package.to_string_lossy());
+        if let Some(file_name) = package.file_name() {
+            println!(
+                "Installing {} on {}...",
+                file_name.to_string_lossy(),
+                device.name
+            );
+        } else {
+            println!(
+                "Installing {} on {}...",
+                package.to_string_lossy(),
+                device.name
+            );
+        }
         match session.install_app(package) {
             Ok(package_id) => println!("{package_id} installed."),
             Err(e) => {

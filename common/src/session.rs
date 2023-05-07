@@ -1,8 +1,10 @@
-use crate::device_manager::Device;
-use libssh_rs::{AuthStatus, Error as SshError, Session, SshKey, SshOption};
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 use std::io::Error as IoError;
 use std::time::Duration;
+
+use libssh_rs::{AuthStatus, Error as SshError, Session, SshKey, SshOption};
+
+use crate::device_manager::Device;
 
 pub trait NewSession {
     fn new_session(&self) -> Result<Session, SessionError>;

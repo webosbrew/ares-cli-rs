@@ -7,13 +7,14 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use tar::{Builder as TarBuilder, Header as TarHeader};
 
-pub(crate) struct ControlInfo {
+pub struct ControlInfo {
     pub package: String,
     pub version: String,
+    pub installed_size: usize,
     pub architecture: String,
 }
 
-pub(crate) trait AppendControl {
+pub trait AppendControl {
     fn append_control(&mut self, info: &ControlInfo) -> std::io::Result<()>;
 }
 
@@ -52,7 +53,7 @@ impl Display for ControlInfo {
             .unwrap();
         f.write_fmt(format_args!("Architecture: {}\n", self.architecture))
             .unwrap();
-        f.write_fmt(format_args!("Installed-Size: {}\n", 0))
+        f.write_fmt(format_args!("Installed-Size: {}\n", self.installed_size))
             .unwrap();
         f.write_fmt(format_args!("Maintainer: {}\n", "N/A <nobody@example.com>"))
             .unwrap();
