@@ -13,6 +13,7 @@ use tar::{Builder as TarBuilder, EntryType, Header as TarHeader};
 use walkdir::WalkDir;
 
 use crate::input::data::DataInfo;
+use crate::input::filter_by_excludes;
 
 pub trait AppendData {
     fn append_data(&mut self, details: &DataInfo, mtime: u64) -> Result<()>;
@@ -126,14 +127,13 @@ where
     let walker = WalkDir::new(base_path)
         .contents_first(false)
         .sort_by_file_name();
-    for entry in walker.into_iter().filter_entry(|entry| {
-        if let Some(exclude) = excludes {
-            return !exclude.is_match(entry.path().to_slash_lossy().as_ref());
-        }
-        return true;
-    }) {
+    for entry in walker
+        .into_iter()
+        .filter_entry(|entry| filter_by_excludes(entry, excludes))
+    {
         let entry = entry?;
         let entry_type = entry.file_type();
+        let entry_metadata = entry.metadata()?;
         let tar_path = format!(
             "{}{}",
             prefix.as_ref(),
@@ -146,18 +146,19 @@ where
         if entry_type.is_symlink() {
             let link_target = fs::read_link(entry.path())?;
             println!(
-                "Adding symlink {tar_path} => {}",
-                link_target.to_slash_lossy()
+                "Adding symlink {tar_path} => {} ({} bytes)",
+                link_target.to_slash_lossy(),
+                entry_metadata.len(),
             );
             let mut header = TarHeader::new_gnu();
-            header.set_metadata(&entry.metadata()?);
+            header.set_metadata(&entry_metadata);
             header.set_cksum();
             tar.append_link(&mut header, tar_path, link_target)?;
         } else if entry_type.is_dir() {
-            println!("Adding dir {tar_path}");
+            println!("Adding dir {tar_path} ({} bytes)", entry_metadata.len());
             tar.append_dir(tar_path, entry.path())?;
         } else {
-            println!("Adding file {tar_path}");
+            println!("Adding file {tar_path} ({} bytes)", entry_metadata.len());
             tar.append_file(tar_path, &mut File::open(entry.path())?)?;
         }
     }
