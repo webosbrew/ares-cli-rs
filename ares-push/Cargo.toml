@@ -10,5 +10,5 @@ common = { path = "../common" }
 clap = { version = "4.2.4", features = ["derive"] }
 
 [features]
-default = ["vendored-openssl"]
+default = []
 vendored-openssl = ["common/vendored-openssl"]
