@@ -4,6 +4,7 @@ use std::process::exit;
 use clap::Parser;
 
 use common::device_manager::DeviceManager;
+use common::device_picker::PickDevice;
 use common::session::NewSession;
 use install::InstallApp;
 use list::ListApps;
@@ -45,12 +46,7 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
     let manager = DeviceManager::default();
-    let devices = manager.list().unwrap();
-    let device = if let Some(s) = cli.device {
-        devices.iter().find(|d| d.name == s)
-    } else {
-        devices.iter().find(|d| d.default.unwrap_or(false))
-    };
+    let device = manager.pick(cli.device, cli.pick_device).unwrap();
     if device.is_none() {
         eprintln!("Device not found");
         exit(1);

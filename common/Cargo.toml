@@ -20,5 +20,12 @@ path-slash = "0.2.1"
 openssl = { version = "=0.10.35" }
 openssl-sys = { version = "=0.9.71" }
 
+[target.'cfg(target_os="windows")'.dependencies]
+native-windows-gui = { version = "1.0.12" }
+native-windows-derive = "1.0.3"
+
+[target.'cfg(all(not(target_os="windows"), not(target_os="macos")))'.dependencies]
+gtk = "0.17.1"
+
 [features]
 vendored-openssl = ["libssh-rs-sys/vendored-openssl", "libssh-rs-sys/libz-sys"]

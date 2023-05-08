@@ -62,7 +62,7 @@ impl DeviceManager {
         return Ok(device);
     }
 
-    pub async fn remove(&self, name: &str, remove_key: bool) -> Result<(), Error> {
+    pub fn remove(&self, name: &str, remove_key: bool) -> Result<(), Error> {
         let devices = read()?;
         let (will_delete, mut will_keep): (Vec<Device>, Vec<Device>) =
             devices.into_iter().partition(|d| d.name == name);
@@ -92,7 +92,7 @@ impl DeviceManager {
     }
 
     //noinspection HttpUrlsUsage
-    pub async fn novacom_getkey(&self, address: &str, passphrase: &str) -> Result<String, Error> {
+    pub fn novacom_getkey(&self, address: &str, passphrase: &str) -> Result<String, Error> {
         let content = reqwest::blocking::get(format!("http://{}:9991/webos_rsa", address))
             .and_then(|res| res.error_for_status())
             .and_then(|res| res.text())
@@ -113,7 +113,7 @@ impl DeviceManager {
         };
     }
 
-    pub async fn localkey_verify(&self, name: &str, passphrase: &str) -> Result<(), Error> {
+    pub fn localkey_verify(&self, name: &str, passphrase: &str) -> Result<(), Error> {
         let name_path = Path::new(name);
         let ssh_key_path = if name_path.is_absolute() {
             name_path.to_path_buf()

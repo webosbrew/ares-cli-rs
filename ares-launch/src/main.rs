@@ -4,6 +4,7 @@ use clap::Parser;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
+use common::device_manager::pick::PickDevice;
 use common::device_manager::DeviceManager;
 use common::luna::Luna;
 use common::session::NewSession;
@@ -57,12 +58,7 @@ fn main() {
         return;
     }
     let manager = DeviceManager::default();
-    let devices = manager.list().unwrap();
-    let device = if let Some(s) = cli.device {
-        devices.iter().find(|d| d.name == s)
-    } else {
-        devices.iter().find(|d| d.default.unwrap_or(false))
-    };
+    let device = manager.pick(cli.device, cli.pick_device).unwrap();
     if device.is_none() {
         eprintln!("Device not found");
         exit(1);
