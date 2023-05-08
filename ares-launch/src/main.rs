@@ -4,8 +4,8 @@ use clap::Parser;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
-use common::device_manager::pick::PickDevice;
 use common::device_manager::DeviceManager;
+use common::device_picker::PickDevice;
 use common::luna::Luna;
 use common::session::NewSession;
 

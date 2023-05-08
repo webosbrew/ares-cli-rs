@@ -1,8 +1,10 @@
-use clap::Parser;
-use common::device_manager::pick::PickDevice;
-use common::device_manager::DeviceManager;
-use common::session::NewSession;
 use std::process::exit;
+
+use clap::Parser;
+
+use common::device_manager::DeviceManager;
+use common::device_picker::PickDevice;
+use common::session::NewSession;
 
 #[derive(Parser, Debug)]
 #[command(about)]

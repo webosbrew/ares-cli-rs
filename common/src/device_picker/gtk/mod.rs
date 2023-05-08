@@ -1,14 +1,13 @@
 use std::sync::{Arc, Mutex};
 
-use gtk::{Align, Application, ApplicationWindow, Button, Label, ListBox, ListBoxRow, Orientation};
 use gtk::prelude::*;
+use gtk::{Align, Application, ApplicationWindow, Button, Label, ListBox, ListBoxRow, Orientation};
 
 use crate::device_manager::Device;
 use crate::device_picker::PickPrompt;
 
 #[derive(Default)]
 pub struct PickPromptGtk {}
-
 
 impl PickPrompt for PickPromptGtk {
     fn pick<D: AsRef<Device>>(&self, devices: Vec<D>) -> Option<Device> {
