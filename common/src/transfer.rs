@@ -64,7 +64,10 @@ impl FileTransfer for Session {
                 reason: format!("cat command exited with status {result_code}"),
             });
         }
-        println!("Finished reading file {}.", source.as_ref().to_slash_lossy());
+        println!(
+            "Finished reading file {}.",
+            source.as_ref().to_slash_lossy()
+        );
         return Ok(());
     }
 

@@ -88,7 +88,8 @@ fn fix_devices_json_perm(path: PathBuf) -> Result<(), Error> {
 
 #[cfg(not(target_family = "windows"))]
 fn devices_file_path() -> Result<PathBuf, Error> {
-    let home = home_dir().ok_or_else(|| Error::new(ErrorKind::NotFound, "Can't find home directory"))?;
+    let home =
+        home_dir().ok_or_else(|| Error::new(ErrorKind::NotFound, "Can't find home directory"))?;
     return Ok(home.join(".webos").join("ose").join("novacom-devices.json"));
 }
 

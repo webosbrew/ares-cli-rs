@@ -8,8 +8,8 @@ use serde_json::Value;
 use crate::session::SessionError;
 
 mod luna;
-mod subscription;
 mod message;
+mod subscription;
 
 pub trait Luna {
     fn call<P, R>(&self, uri: &str, payload: P, public: bool) -> Result<R, LunaError>

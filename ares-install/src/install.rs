@@ -57,7 +57,7 @@ impl InstallApp for Session {
                 ),
             )
         })?;
-        let ipk_path = format!("/media/developer/temp/ares_install_{checksum}.ipk");
+        let ipk_path = format!("/media/developer/temp/ares_install_{}.ipk", &checksum[..10]);
         self.put(&mut file, &ipk_path)?;
 
         let result = match self.subscribe(
@@ -75,9 +75,9 @@ impl InstallApp for Session {
             Err(e) => Some(Err(e.into())),
         };
 
-        // if let Err(e) = self.rm(&ipk_path) {
-        //     eprintln!("Failed to delete {}: {:?}", ipk_path, e);
-        // }
+        if let Err(e) = self.rm(&ipk_path) {
+            eprintln!("Failed to delete {}: {:?}", ipk_path, e);
+        }
 
         return result.unwrap();
     }

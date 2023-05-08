@@ -1,5 +1,5 @@
-use std::io::{Error as IoError, ErrorKind};
 use std::io::Read;
+use std::io::{Error as IoError, ErrorKind};
 
 use libssh_rs::{Error as SshError, Session};
 use serde::de::DeserializeOwned;
