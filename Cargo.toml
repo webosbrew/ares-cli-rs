@@ -1,5 +1,5 @@
 [workspace]
-members = ["common", "ares-package", "ares-install", "ares-push"]
+members = ["common", "ares-package", "ares-install", "ares-push", "ares-launch"]
 
 [patch.crates-io]
 libssh-rs = { git = "https://github.com/wez/libssh-rs.git", rev = "74d845c1696b710b8b8388e193b3882c15edf2c1" }

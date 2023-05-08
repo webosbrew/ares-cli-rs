@@ -86,6 +86,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ares-launch"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "common",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ares-package"
 version = "0.1.0"
 dependencies = [
@@ -104,6 +114,9 @@ dependencies = [
 [[package]]
 name = "ares-push"
 version = "0.1.0"
+dependencies = [
+ "common",
+]
 
 [[package]]
 name = "autocfg"

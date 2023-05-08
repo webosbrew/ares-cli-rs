@@ -22,7 +22,7 @@ struct Cli {
         help = "Specify DEVICE to use"
     )]
     device: Option<String>,
-    #[arg(short, long, group = "device_group", help = "Open device chooser")]
+    #[arg(long, group = "device_group", help = "Open device chooser")]
     pick_device: bool,
     #[arg(short, long, group = "action", help = "List the installed apps")]
     list: bool,

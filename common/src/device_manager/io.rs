@@ -1,9 +1,11 @@
-use home::home_dir;
+#[cfg(target_family = "windows")]
+use std::env;
+use std::fs;
 use std::fs::{create_dir_all, File};
 use std::io::{BufReader, BufWriter, Error, ErrorKind};
 use std::path::PathBuf;
-use std::{env, fs};
 
+use home::home_dir;
 use serde_json::Value;
 
 use crate::device_manager::Device;
