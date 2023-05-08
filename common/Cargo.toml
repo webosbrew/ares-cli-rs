@@ -25,8 +25,6 @@ native-windows-derive = "1.0.3"
 libssh-rs-sys = { version = "0.1.3", features = ["vendored-openssl", "libz-sys"] }
 
 [target.'cfg(not(target_os="windows"))'.dependencies]
-native-windows-gui = { version = "1.0.12" }
-native-windows-derive = "1.0.3"
 libssh-rs-sys = { version = "0.1.3" }
 
 [target.'cfg(all(not(target_os="windows"), not(target_os="macos")))'.dependencies]
