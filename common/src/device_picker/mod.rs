@@ -34,8 +34,6 @@ trait PickPrompt: Default {
     fn pick<D: AsRef<Device>>(&self, devices: Vec<D>) -> Option<Device>;
 }
 
-struct PickPromptPlatform {}
-
 fn pick_prompt() -> impl PickPrompt {
     #[cfg(target_os = "windows")]
     return PickPromptWindows::default();
