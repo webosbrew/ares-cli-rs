@@ -2,8 +2,10 @@ use std::process::exit;
 
 use clap::Parser;
 
-use common::device_manager::DeviceManager;
-use common::device_picker::{DeviceSelection, PickDevice};
+mod picker;
+
+use ares_common_device::DeviceManager;
+use picker::{DeviceSelection, PickDevice};
 
 #[derive(Parser, Debug)]
 #[command(about)]

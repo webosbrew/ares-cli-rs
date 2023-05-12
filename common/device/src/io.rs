@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use home::home_dir;
 use serde_json::Value;
 
-use crate::device_manager::Device;
+use crate::Device;
 
 pub(crate) fn read() -> Result<Vec<Device>, Error> {
     let path = devices_file_path()?;

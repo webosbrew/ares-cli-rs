@@ -82,9 +82,15 @@ checksum = "d67af77d68a931ecd5cbd8a3b5987d63a1d1d1278f7f6a60ae33db485cdebb69"
 name = "ares-device"
 version = "0.1.0"
 dependencies = [
+ "cfg-if",
  "clap",
- "common",
+ "common-connection",
+ "common-device",
  "embed-manifest",
+ "gtk",
+ "libssh-rs-sys",
+ "native-windows-derive",
+ "native-windows-gui",
 ]
 
 [[package]]
@@ -92,8 +98,8 @@ name = "ares-install"
 version = "0.1.0"
 dependencies = [
  "clap",
- "common",
- "embed-manifest",
+ "common-connection",
+ "common-device",
  "libssh-rs",
  "regex",
  "serde",
@@ -106,8 +112,8 @@ name = "ares-launch"
 version = "0.1.0"
 dependencies = [
  "clap",
- "common",
- "embed-manifest",
+ "common-connection",
+ "common-device",
  "serde",
  "serde_json",
 ]
@@ -133,8 +139,8 @@ name = "ares-push"
 version = "0.1.0"
 dependencies = [
  "clap",
- "common",
- "embed-manifest",
+ "common-connection",
+ "common-device",
  "path-slash",
  "walkdir",
 ]
@@ -298,25 +304,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7"
 
 [[package]]
-name = "common"
+name = "common-connection"
 version = "0.1.0"
 dependencies = [
- "gtk",
- "hex",
- "home",
+ "common-device",
  "libssh-rs",
  "libssh-rs-sys",
- "log",
- "native-windows-derive",
- "native-windows-gui",
  "openssl",
  "openssl-sys",
  "path-slash",
- "pathdiff",
  "reqwest",
  "serde",
  "serde_json",
  "snailquote",
+]
+
+[[package]]
+name = "common-device"
+version = "0.1.0"
+dependencies = [
+ "home",
+ "log",
+ "pathdiff",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

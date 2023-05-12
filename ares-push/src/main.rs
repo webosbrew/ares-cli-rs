@@ -6,9 +6,8 @@ use clap::Parser;
 use path_slash::PathBufExt;
 use walkdir::WalkDir;
 
-use common::device_manager::DeviceManager;
-use common::device_picker::{DeviceSelection, PickDevice};
-use common::session::NewSession;
+use ares_common_connection::session::NewSession;
+use ares_common_device::DeviceManager;
 
 #[derive(Parser, Debug)]
 #[command(about)]
@@ -16,13 +15,11 @@ struct Cli {
     #[arg(
         short,
         long,
-        default_missing_value = "",
-        num_args = 0..2,
         value_name = "DEVICE",
         env = "ARES_DEVICE",
-        help = "Specify DEVICE to use, show picker if no value specified"
+        help = "Specify DEVICE to use"
     )]
-    device: Option<DeviceSelection>,
+    device: Option<String>,
     #[arg(
         value_name = "SOURCE",
         help = "Path in the host machine, where files exist."
@@ -38,7 +35,7 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
     let manager = DeviceManager::default();
-    let device = manager.pick(cli.device.as_ref()).unwrap();
+    let device = manager.find_or_default(cli.device).unwrap();
     if device.is_none() {
         eprintln!("Device not found");
         exit(1);

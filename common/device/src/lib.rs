@@ -7,35 +7,9 @@ mod io;
 mod manager;
 mod privkey;
 
-#[derive(PartialEq, Eq, Hash)]
-pub struct DeviceSessionToken {
-    pub name: String,
-    pub id: Option<String>,
-}
-
+#[derive(Default)]
 pub struct DeviceManager {
     devices: Mutex<Vec<Device>>,
-}
-
-impl Default for DeviceManager {
-    fn default() -> Self {
-        return DeviceManager {
-            devices: Mutex::new(Vec::new()),
-        };
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(untagged)]
-pub enum PrivateKey {
-    Path {
-        #[serde(rename = "openSsh")]
-        name: String,
-    },
-    Data {
-        #[serde(rename = "openSshData")]
-        data: String,
-    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -56,7 +30,7 @@ pub struct Device {
     #[serde(rename = "privateKey", skip_serializing_if = "Option::is_none")]
     pub private_key: Option<PrivateKey>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub files: Option<DeviceFileTransfer>,
+    pub files: Option<FileTransfer>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub passphrase: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -74,9 +48,36 @@ pub struct Device {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub enum DeviceFileTransfer {
+#[serde(untagged)]
+pub enum PrivateKey {
+    Name {
+        #[serde(rename = "openSsh")]
+        name: String,
+    },
+    Path {
+        #[serde(rename = "openSshPath")]
+        path: String,
+    },
+}
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum FileTransfer {
     #[serde(rename = "stream")]
     Stream,
     #[serde(rename = "sftp")]
     Sftp,
+}
+
+pub fn add(left: usize, right: usize) -> usize {
+    left + right
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_works() {
+        let result = add(2, 2);
+        assert_eq!(result, 4);
+    }
 }

@@ -4,10 +4,9 @@ use clap::Parser;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
-use common::device_manager::DeviceManager;
-use common::device_picker::{DeviceSelection, PickDevice};
-use common::luna::Luna;
-use common::session::NewSession;
+use ares_common_connection::luna::Luna;
+use ares_common_connection::session::NewSession;
+use ares_common_device::DeviceManager;
 
 #[derive(Parser, Debug)]
 #[command(about)]
@@ -15,13 +14,11 @@ struct Cli {
     #[arg(
         short,
         long,
-        default_missing_value = "",
-        num_args = 0..2,
         value_name = "DEVICE",
         env = "ARES_DEVICE",
-        help = "Specify DEVICE to use, show picker if no value specified"
+        help = "Specify DEVICE to use"
     )]
-    device: Option<DeviceSelection>,
+    device: Option<String>,
     #[arg(short, long, group = "action", help = "Close a running app")]
     close: bool,
     #[arg(
@@ -58,7 +55,7 @@ fn main() {
         return;
     }
     let manager = DeviceManager::default();
-    let device = manager.pick(cli.device.as_ref()).unwrap();
+    let device = manager.find_or_default(cli.device).unwrap();
     if device.is_none() {
         eprintln!("Device not found");
         exit(1);
