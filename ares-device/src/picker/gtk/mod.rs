@@ -42,6 +42,15 @@ impl PickPrompt for PickPromptGtk {
                 *index.lock().unwrap() = selected.map(|row| row.index()).unwrap_or(-1);
             });
 
+            {
+                let window = window.clone();
+                let ui_result = ui_result.clone();
+                list.connect_row_activated(move |_, selected| {
+                    *ui_result.lock().unwrap() = selected.index();
+                    window.close();
+                });
+            }
+
             content.add(&list);
 
             let buttons = gtk::Box::new(Orientation::Horizontal, 5);
@@ -53,18 +62,22 @@ impl PickPrompt for PickPromptGtk {
             buttons.set_valign(Align::End);
             buttons.set_halign(Align::End);
 
-            let win = window.clone();
-            let index = ui_selected.clone();
-            let ui_result = ui_result.clone();
-            ok.connect_clicked(move |_| {
-                *ui_result.lock().unwrap() = *index.lock().unwrap();
-                win.close();
-            });
+            {
+                let window = window.clone();
+                let ui_selected = ui_selected.clone();
+                let ui_result = ui_result.clone();
+                ok.connect_clicked(move |_| {
+                    *ui_result.lock().unwrap() = *ui_selected.lock().unwrap();
+                    window.close();
+                });
+            }
 
-            let win = window.clone();
-            cancel.connect_clicked(move |_| {
-                win.close();
-            });
+            {
+                let window = window.clone();
+                cancel.connect_clicked(move |_| {
+                    window.close();
+                });
+            }
 
             content.add(&buttons);
 
