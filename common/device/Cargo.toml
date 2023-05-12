@@ -4,9 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "ares_common_device"
-path = "src/lib.rs"
-crate-type = ["dylib"]
+name = "ares_device_lib"
 
 [dependencies]
 serde = { version = "1.0.160", features = ["derive"] }

@@ -4,7 +4,7 @@ use clap::Parser;
 
 mod picker;
 
-use ares_common_device::DeviceManager;
+use ares_device_lib::DeviceManager;
 use picker::{DeviceSelection, PickDevice};
 
 #[derive(Parser, Debug)]

@@ -6,7 +6,7 @@ use std::fmt::{Display, Formatter};
 use nwd::NwgUi;
 use nwg::NativeUi;
 
-use ares_common_device::Device;
+use ares_device_lib::Device;
 
 use crate::picker::PickPrompt;
 

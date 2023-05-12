@@ -3,8 +3,8 @@ use std::process::exit;
 
 use clap::Parser;
 
-use ares_common_connection::session::NewSession;
-use ares_common_device::DeviceManager;
+use ares_connection_lib::session::NewSession;
+use ares_device_lib::DeviceManager;
 use install::InstallApp;
 use list::ListApps;
 

@@ -4,9 +4,9 @@ use clap::Parser;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
-use ares_common_connection::luna::Luna;
-use ares_common_connection::session::NewSession;
-use ares_common_device::DeviceManager;
+use ares_connection_lib::luna::Luna;
+use ares_connection_lib::session::NewSession;
+use ares_device_lib::DeviceManager;
 
 #[derive(Parser, Debug)]
 #[command(about)]

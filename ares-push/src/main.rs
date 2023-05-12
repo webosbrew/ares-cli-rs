@@ -6,8 +6,8 @@ use clap::Parser;
 use path_slash::PathBufExt;
 use walkdir::WalkDir;
 
-use ares_common_connection::session::NewSession;
-use ares_common_device::DeviceManager;
+use ares_connection_lib::session::NewSession;
+use ares_device_lib::DeviceManager;
 
 #[derive(Parser, Debug)]
 #[command(about)]

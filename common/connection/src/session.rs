@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use libssh_rs::{AuthStatus, Error as SshError, Session, SshKey, SshOption};
 
-use ares_common_device::Device;
+use ares_device_lib::Device;
 
 pub trait NewSession {
     fn new_session(&self) -> Result<Session, SessionError>;

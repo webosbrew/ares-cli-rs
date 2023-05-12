@@ -1,7 +1,7 @@
 use std::io::Error;
 use std::str::FromStr;
 
-use ares_common_device::{Device, DeviceManager};
+use ares_device_lib::{Device, DeviceManager};
 cfg_if::cfg_if! {
     if #[cfg(target_os="windows")] {
         mod windows;

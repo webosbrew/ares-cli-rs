@@ -4,9 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "ares_common_connection"
-path = "src/lib.rs"
-crate-type = ["dylib"]
+name = "ares_connection_lib"
 
 [dependencies]
 common-device = { path = "../device" }
