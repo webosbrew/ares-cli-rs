@@ -1,5 +1,7 @@
 #!/bin/sh
 
-for f in ares-*; do
-  cargo install --path "$f" --no-default-features
+packages=$(cargo tree --depth=0 --prefix=none | sed -r 's/.+\((.+)\)/\1/g' | tr -s '\n')
+
+for f in $packages; do
+  cargo install --path "$f"
 done
