@@ -6,8 +6,9 @@ use std::fmt::{Display, Formatter};
 use nwd::NwgUi;
 use nwg::NativeUi;
 
-use crate::device_manager::Device;
-use crate::device_picker::PickPrompt;
+use ares_common_device::Device;
+
+use crate::picker::PickPrompt;
 
 #[derive(Default)]
 pub struct PickPromptWindows {}
@@ -43,7 +44,7 @@ pub struct PickPromptApp {
     window: nwg::Window,
 
     #[nwg_control(size: (380, 420), position: (10, 10))]
-    #[nwg_events( OnListBoxSelect: [PickPromptApp::on_selection_change] )]
+    #[nwg_events( OnListBoxSelect: [PickPromptApp::on_selection_change], OnListBoxDoubleClick: [PickPromptApp::on_confirm] )]
     devices: nwg::ListBox<DeviceEntry>,
 
     #[nwg_control(text: "Select", size: (185, 60), position: (10, 420), enabled: false)]

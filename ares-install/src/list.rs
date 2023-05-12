@@ -1,7 +1,7 @@
 use libssh_rs::Session;
 use serde::Deserialize;
 
-use common::luna::{Luna, LunaEmptyPayload};
+use ares_common_connection::luna::{Luna, LunaEmptyPayload};
 
 pub(crate) trait ListApps {
     fn list_apps(&self);

@@ -1,4 +1,4 @@
-use crate::device_manager::Device;
+use crate::Device;
 
 impl AsRef<Device> for Device {
     fn as_ref(&self) -> &Device {
@@ -7,7 +7,7 @@ impl AsRef<Device> for Device {
 }
 
 impl Device {
-    pub(crate) fn valid_passphrase(&self) -> Option<String> {
+    pub fn valid_passphrase(&self) -> Option<String> {
         return self.passphrase.clone().filter(|s| !s.is_empty());
     }
 }

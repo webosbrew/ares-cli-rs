@@ -3,7 +3,7 @@
 <assemblyIdentity
     version="1.0.0.0"
     processorArchitecture="*"
-    name="app"
+    name="ares-device"
     type="win32"
 />
 <dependency>

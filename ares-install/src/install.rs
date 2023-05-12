@@ -7,8 +7,8 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Error as JsonError;
 
-use common::luna::{Luna, LunaError, Message};
-use common::transfer::{FileTransfer, TransferError};
+use ares_common_connection::luna::{Luna, LunaError, Message};
+use ares_common_connection::transfer::{FileTransfer, TransferError};
 
 pub(crate) trait InstallApp {
     fn install_app<P: AsRef<Path>>(&self, package: P) -> Result<String, InstallError>;
