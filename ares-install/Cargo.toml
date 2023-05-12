@@ -8,7 +8,7 @@ description = "Install or Remove app from a device"
 
 [dependencies]
 common = { path = "../common" }
-clap = { version = "4.2.4", features = ["derive"] }
+clap = { version = "4.2.4", features = ["derive", "env"] }
 serde = { version = "1.0.160", features = ["derive"] }
 serde_json = "1.0.96"
 libssh-rs = { version = "0.1.8" }

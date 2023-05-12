@@ -4,7 +4,7 @@ use std::process::exit;
 use clap::Parser;
 
 use common::device_manager::DeviceManager;
-use common::device_picker::PickDevice;
+use common::device_picker::{DeviceSelection, PickDevice};
 use common::session::NewSession;
 use install::InstallApp;
 use list::ListApps;
@@ -18,13 +18,13 @@ struct Cli {
     #[arg(
         short,
         long,
-        group = "device_group",
+        default_missing_value = "",
+        num_args = 0..2,
         value_name = "DEVICE",
-        help = "Specify DEVICE to use"
+        env = "ARES_DEVICE",
+        help = "Specify DEVICE to use, show picker if no value specified"
     )]
-    device: Option<String>,
-    #[arg(long, group = "device_group", help = "Open device chooser")]
-    pick_device: bool,
+    device: Option<DeviceSelection>,
     #[arg(short, long, group = "action", help = "List the installed apps")]
     list: bool,
     #[arg(
@@ -46,7 +46,7 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
     let manager = DeviceManager::default();
-    let device = manager.pick(cli.device, cli.pick_device).unwrap();
+    let device = manager.pick(cli.device.as_ref()).unwrap();
     if device.is_none() {
         eprintln!("Device not found");
         exit(1);

@@ -1,4 +1,5 @@
 use std::io::Error;
+use std::str::FromStr;
 
 use crate::device_manager::{Device, DeviceManager};
 #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
@@ -13,25 +14,43 @@ mod windows;
 mod gtk;
 
 pub trait PickDevice {
-    fn pick<S: AsRef<str>>(&self, name: Option<S>, pick: bool) -> Result<Option<Device>, Error>;
+    fn pick(&self, selection: Option<&DeviceSelection>) -> Result<Option<Device>, Error>;
+}
+
+#[derive(Clone, Debug)]
+pub enum DeviceSelection {
+    Name(String),
+    Pick,
+}
+
+trait PickPrompt: Default {
+    fn pick<D: AsRef<Device>>(&self, devices: Vec<D>) -> Option<Device>;
 }
 
 impl PickDevice for DeviceManager {
-    fn pick<S: AsRef<str>>(&self, name: Option<S>, pick: bool) -> Result<Option<Device>, Error> {
+    fn pick(&self, selection: Option<&DeviceSelection>) -> Result<Option<Device>, Error> {
         let devices = self.list()?;
-        let device = if let Some(s) = name {
-            devices.iter().find(|d| d.name == s.as_ref()).cloned()
-        } else if !pick {
-            devices.iter().find(|d| d.default.unwrap_or(false)).cloned()
-        } else {
-            pick_prompt().pick(devices)
+        let device = match selection {
+            Some(DeviceSelection::Name(s)) => {
+                devices.iter().find(|d| &d.name == s).cloned()
+            }
+            Some(DeviceSelection::Pick) => pick_prompt().pick(devices),
+            None => devices.iter().find(|d| d.default.unwrap_or(false)).cloned(),
         };
         return Ok(device);
     }
 }
 
-trait PickPrompt: Default {
-    fn pick<D: AsRef<Device>>(&self, devices: Vec<D>) -> Option<Device>;
+impl FromStr for DeviceSelection {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        return if s.is_empty() {
+            Ok(Self::Pick)
+        } else {
+            Ok(Self::Name(s.to_string()))
+        };
+    }
 }
 
 fn pick_prompt() -> impl PickPrompt {
