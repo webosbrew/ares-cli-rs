@@ -2,6 +2,7 @@ extern crate native_windows_derive as nwd;
 extern crate native_windows_gui as nwg;
 
 use std::fmt::{Display, Formatter};
+use std::sync::Mutex;
 
 use nwd::NwgUi;
 use nwg::NativeUi;
@@ -19,6 +20,7 @@ impl PickPrompt for PickPromptWindows {
         nwg::Font::set_global_family("Segoe UI").expect("Failed to set default font");
 
         let app = PickPromptApp::default();
+        *app.index.lock().unwrap() = -1;
         let ui = PickPromptApp::build_ui(app).expect("Failed to build UI");
         ui.devices.set_collection(
             devices
@@ -30,10 +32,10 @@ impl PickPrompt for PickPromptWindows {
         );
 
         nwg::dispatch_thread_events();
-        if let Some(index) = ui.devices.selection() {
-            return devices.get(index).map(|d| d.as_ref().clone());
-        }
-        return None;
+
+        return devices
+            .get(ui.index.lock().unwrap().clone() as usize)
+            .map(|d| d.as_ref().clone());
     }
 }
 
@@ -54,6 +56,8 @@ pub struct PickPromptApp {
     #[nwg_control(text: "Cancel", size: (185, 60), position: (205, 420))]
     #[nwg_events( OnButtonClick: [PickPromptApp::on_cancel] )]
     cancel: nwg::Button,
+
+    index: Mutex<i32>,
 }
 
 #[derive(Default)]
@@ -81,10 +85,17 @@ impl PickPromptApp {
     }
 
     fn on_cancel(&self) {
+        *self.index.lock().unwrap() = -1;
         self.window.close();
     }
 
     fn on_selection_change(&self) {
-        self.ok.set_enabled(self.devices.selection().is_some());
+        if let Some(index) = self.devices.selection() {
+            *self.index.lock().unwrap() = index as i32;
+            self.ok.set_enabled(true);
+        } else {
+            *self.index.lock().unwrap() = -1;
+            self.ok.set_enabled(false);
+        }
     }
 }
