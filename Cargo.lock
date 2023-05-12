@@ -114,6 +114,7 @@ dependencies = [
  "clap",
  "common-connection",
  "common-device",
+ "libssh-rs",
  "serde",
  "serde_json",
 ]

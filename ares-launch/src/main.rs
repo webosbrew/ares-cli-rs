@@ -4,9 +4,16 @@ use clap::Parser;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
-use ares_connection_lib::luna::Luna;
 use ares_connection_lib::session::NewSession;
 use ares_device_lib::DeviceManager;
+
+use crate::close::CloseApp;
+use crate::launch::LaunchApp;
+use crate::running::ListRunning;
+
+mod close;
+mod launch;
+mod running;
 
 #[derive(Parser, Debug)]
 #[command(about)]
@@ -21,6 +28,8 @@ struct Cli {
     device: Option<String>,
     #[arg(short, long, group = "action", help = "Close a running app")]
     close: bool,
+    #[arg(short, long, group = "action", help = "List running apps")]
+    running: bool,
     #[arg(
         short,
         long,
@@ -50,10 +59,6 @@ struct LaunchResponse {
 
 fn main() {
     let cli = Cli::parse();
-    if cli.app_id.is_none() {
-        Cli::parse_from(vec!["", "--help"]);
-        return;
-    }
     let manager = DeviceManager::default();
     let device = manager.find_or_default(cli.device).unwrap();
     if device.is_none() {
@@ -62,6 +67,16 @@ fn main() {
     }
     let device = device.unwrap();
     let session = device.new_session().unwrap();
+
+    if cli.running {
+        session.list_running();
+        return;
+    }
+    if cli.app_id.is_none() {
+        Cli::parse_from(vec!["", "--help"]);
+        return;
+    }
+
     let mut params: Value = Value::Null;
     if !cli.params.is_empty() {
         let mut map = Map::new();
@@ -82,26 +97,9 @@ fn main() {
         }
         params = Value::Object(map);
     }
-    let app_id = cli.app_id.unwrap();
-    let response: LaunchResponse = session
-        .call(
-            "luna://com.webos.applicationManager/launch",
-            &LaunchParams {
-                id: app_id.clone(),
-                subscribe: false,
-                params,
-            },
-            true,
-        )
-        .unwrap();
-    if response.return_value {
-        println!("Launched application {app_id}");
+    if cli.close {
+        session.close_app(cli.app_id.unwrap(), params);
     } else {
-        eprintln!(
-            "Failed to launch {app_id}: {} ({})",
-            response.error_text.unwrap_or(String::from("unknown error")),
-            response.error_code.unwrap_or(-1)
-        );
-        exit(1);
+        session.launch_app(cli.app_id.unwrap(), params);
     }
 }
