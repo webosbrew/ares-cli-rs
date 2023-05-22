@@ -37,6 +37,7 @@ impl PickPrompt for PickPromptGtk {
                 list.insert(&row, -1);
             }
             list.set_vexpand(true);
+            list.set_activate_on_single_click(false);
             let index = ui_selected.clone();
             list.connect_row_selected(move |_, selected| {
                 *index.lock().unwrap() = selected.map(|row| row.index()).unwrap_or(-1);
