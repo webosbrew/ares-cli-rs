@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  release-ubuntu:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - uses: olegtarasov/get-tag@v2.1.2
+        id: tagName
+
+      - name: Update Packages
+        shell: bash
+        run: sudo apt-get -yq update
+
+      - name: Install Build Dependencies
+        run: sudo apt-get install -yq libgtk-3-dev
+
+      - name: Use Rust Stable
+        run: rustup toolchain install stable --profile minimal
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-deb
+        run: cargo install cargo-deb
+
+      - name: Build Packages
+        run: |
+          for f in ares-*; do
+            cargo deb -p "$f" || exit 1
+          done
+
+      - name: Create Release (Ubuntu)
+        id: create_release_ubuntu
+        uses: ncipollo/release-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: Release ${{ steps.tagName.outputs.tag }}
+          allowUpdates: true
+          omitNameDuringUpdate: true
+          omitBodyDuringUpdate: true
+          omitPrereleaseDuringUpdate: true
+          artifacts: target/debian/*.deb
