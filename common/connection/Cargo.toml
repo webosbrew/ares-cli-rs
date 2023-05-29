@@ -21,4 +21,4 @@ openssl-sys = { version = "=0.9.71" }
 libssh-rs-sys = { version = "0.1.3", features = ["vendored-openssl", "libz-sys"] }
 
 [target.'cfg(not(target_os="windows"))'.dependencies]
-libssh-rs-sys = { version = "0.1.3" }
+libssh-rs-sys = { version = "0.1.3", default-features = false }

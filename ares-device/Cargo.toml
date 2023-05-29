@@ -2,6 +2,9 @@
 name = "ares-device"
 version = "0.1.0"
 edition = "2021"
+authors = ["Mariotaku Lee <mariotaku.lee@gmail.com>"]
+license = "Apache-2.0"
+description = "Tools for getting device information"
 
 [dependencies]
 common-device = { path = "../common/device" }
@@ -15,10 +18,13 @@ native-windows-derive = "1.0.3"
 libssh-rs-sys = { version = "0.1.3", features = ["vendored-openssl", "libz-sys"] }
 
 [target.'cfg(not(target_os="windows"))'.dependencies]
-libssh-rs-sys = { version = "0.1.3" }
+libssh-rs-sys = { version = "0.1.3", default-features = false }
 
 [target.'cfg(all(not(target_os="windows"), not(target_os="macos")))'.dependencies]
 gtk = "0.17.1"
 
 [build-dependencies]
 embed-manifest = "1.3.1"
+
+[package.metadata.deb]
+section = "devel"

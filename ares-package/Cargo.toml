@@ -2,6 +2,8 @@
 name = "ares-package"
 version = "0.1.0"
 edition = "2021"
+authors = ["Mariotaku Lee <mariotaku.lee@gmail.com>"]
+license = "Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -16,3 +18,6 @@ path-slash = "0.2.1"
 elf = "0.7.2"
 regex = "1.8.1"
 walkdir = "2.3.3"
+
+[package.metadata.deb]
+section = "devel"
