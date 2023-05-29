@@ -17,6 +17,11 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Use Rust Stable
+        run: rustup toolchain install stable --profile minimal
+
+      - uses: Swatinem/rust-cache@v2
+
       - name: Install cargo-deb
         run: cargo install cargo-deb
 
