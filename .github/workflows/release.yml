@@ -27,6 +27,8 @@ jobs:
         run: rustup toolchain install stable --profile minimal
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ runner.os }}
 
       - name: Install cargo-deb
         run: cargo install cargo-deb
