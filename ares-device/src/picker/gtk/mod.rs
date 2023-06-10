@@ -29,13 +29,18 @@ impl PickPrompt for PickPromptGtk {
             let content = gtk::Box::new(Orientation::Vertical, 5);
 
             let list = ListBox::new();
-            for item in &items {
+            let mut selected_row: i32 = -1;
+            for (index, item) in items.iter().enumerate() {
                 let row = ListBoxRow::new();
                 let label = Label::new(Some(&item.name));
                 label.set_halign(Align::Start);
                 row.set_child(Some(&label));
                 list.insert(&row, -1);
+                if item.default.unwrap_or(false) {
+                    selected_row = index as i32;
+                }
             }
+            list.select_row(list.row_at_index(selected_row).as_ref());
             list.set_vexpand(true);
             list.set_activate_on_single_click(false);
             let index = ui_selected.clone();
