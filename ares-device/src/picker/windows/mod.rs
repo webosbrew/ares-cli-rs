@@ -30,6 +30,11 @@ impl PickPrompt for PickPromptWindows {
                 })
                 .collect(),
         );
+        ui.devices.set_selection(
+            devices
+                .iter()
+                .position(|d| d.as_ref().default.unwrap_or(false)),
+        );
 
         nwg::dispatch_thread_events();
 
