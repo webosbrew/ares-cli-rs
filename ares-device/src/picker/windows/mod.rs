@@ -35,6 +35,7 @@ impl PickPrompt for PickPromptWindows {
                 .iter()
                 .position(|d| d.as_ref().default.unwrap_or(false)),
         );
+        ui.on_selection_change();
 
         nwg::dispatch_thread_events();
 
