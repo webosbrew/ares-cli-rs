@@ -88,4 +88,5 @@ fn main() {
     };
     ar.append_control(&control, mtime).unwrap();
     ar.append_data(&data, mtime).unwrap();
+    println!("Done.");
 }
