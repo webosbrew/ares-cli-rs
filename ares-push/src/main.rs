@@ -62,7 +62,7 @@ fn main() {
                         entry.path().to_string_lossy(),
                         dest_path.to_slash_lossy()
                     );
-                    sftp.create_dir(dest_path.to_slash_lossy().as_ref(), 0o755);
+                    sftp.create_dir(dest_path.to_slash_lossy().as_ref(), 0o755).unwrap_or(());
                 } else if file_type.is_file() {
                     println!(
                         "{} => {}",
@@ -71,7 +71,7 @@ fn main() {
                     );
                     let mut file = match sftp.open(
                         dest_path.to_slash_lossy().as_ref(),
-                        0x0301, /*O_WRONLY | O_CREAT | O_TRUNC*/
+                        0o1101, /*O_WRONLY | O_CREAT | O_TRUNC*/
                         0o644,
                     ) {
                         Ok(file) => file,

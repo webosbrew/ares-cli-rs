@@ -23,21 +23,30 @@ pub enum TransferError {
 impl FileTransfer for Session {
     fn put<P: AsRef<Path>, R: Read>(&self, source: &mut R, target: P) -> Result<(), TransferError> {
         println!("Writing file to {}...", target.as_ref().to_slash_lossy());
-        let ch = self.new_channel()?;
-        ch.open_session()?;
-        ch.request_exec(&format!(
-            "cat > {}",
-            snailquote::escape(target.as_ref().to_slash_lossy().as_ref())
-        ))?;
-        std::io::copy(source, &mut ch.stdin())?;
-        ch.send_eof()?;
-        let result_code = ch.get_exit_status().unwrap_or(0) as i32;
-        ch.close()?;
-        if result_code != 0 {
-            return Err(TransferError::ExitCode {
-                code: result_code,
-                reason: format!("cat command exited with status {result_code}"),
-            });
+        if let Ok(sftp) = self.sftp() {
+            let mut file = sftp.open(
+                target.as_ref().to_slash_lossy().as_ref(),
+                0o1101, /*O_WRONLY | O_CREAT | O_TRUNC on Linux*/
+                0o644,
+            )?;
+            std::io::copy(source, &mut file)?;
+        } else {
+            let ch = self.new_channel()?;
+            ch.open_session()?;
+            ch.request_exec(&format!(
+                "cat > {}",
+                snailquote::escape(target.as_ref().to_slash_lossy().as_ref())
+            ))?;
+            std::io::copy(source, &mut ch.stdin())?;
+            ch.send_eof()?;
+            let result_code = ch.get_exit_status().unwrap_or(0) as i32;
+            ch.close()?;
+            if result_code != 0 {
+                return Err(TransferError::ExitCode {
+                    code: result_code,
+                    reason: format!("cat command exited with status {result_code}"),
+                });
+            }
         }
         println!("Finish writing file {}.", target.as_ref().to_slash_lossy());
         return Ok(());
@@ -49,20 +58,25 @@ impl FileTransfer for Session {
         target: &mut W,
     ) -> Result<(), TransferError> {
         println!("Reading file from {}...", source.as_ref().to_slash_lossy());
-        let ch = self.new_channel()?;
-        ch.open_session()?;
-        ch.request_exec(&format!(
-            "cat {}",
-            snailquote::escape(source.as_ref().to_slash_lossy().as_ref())
-        ))?;
-        std::io::copy(&mut ch.stdout(), target)?;
-        let result_code = ch.get_exit_status().unwrap_or(0) as i32;
-        ch.close()?;
-        if result_code != 0 {
-            return Err(TransferError::ExitCode {
-                code: result_code,
-                reason: format!("cat command exited with status {result_code}"),
-            });
+        if let Ok(sftp) = self.sftp() {
+            let mut file = sftp.open(source.as_ref().to_slash_lossy().as_ref(), 0, 0)?;
+            std::io::copy(&mut file, target)?;
+        } else {
+            let ch = self.new_channel()?;
+            ch.open_session()?;
+            ch.request_exec(&format!(
+                "cat {}",
+                snailquote::escape(source.as_ref().to_slash_lossy().as_ref())
+            ))?;
+            std::io::copy(&mut ch.stdout(), target)?;
+            let result_code = ch.get_exit_status().unwrap_or(0) as i32;
+            ch.close()?;
+            if result_code != 0 {
+                return Err(TransferError::ExitCode {
+                    code: result_code,
+                    reason: format!("cat command exited with status {result_code}"),
+                });
+            }
         }
         println!(
             "Finished reading file {}.",
@@ -73,20 +87,24 @@ impl FileTransfer for Session {
 
     fn rm<P: AsRef<Path>>(&self, path: P) -> Result<(), TransferError> {
         println!("Removing file {}...", path.as_ref().to_slash_lossy());
-        let ch = self.new_channel()?;
-        ch.open_session()?;
-        ch.request_exec(&format!(
-            "rm -rf {}",
-            snailquote::escape(path.as_ref().to_slash_lossy().as_ref())
-        ))?;
-        ch.send_eof()?;
-        let result_code = ch.get_exit_status().unwrap_or(0) as i32;
-        ch.close()?;
-        if result_code != 0 {
-            return Err(TransferError::ExitCode {
-                code: result_code,
-                reason: format!("rm command exited with status {result_code}"),
-            });
+        if let Ok(sftp) = self.sftp() {
+            sftp.remove_file(path.as_ref().to_slash_lossy().as_ref())?;
+        } else {
+            let ch = self.new_channel()?;
+            ch.open_session()?;
+            ch.request_exec(&format!(
+                "rm -rf {}",
+                snailquote::escape(path.as_ref().to_slash_lossy().as_ref())
+            ))?;
+            ch.send_eof()?;
+            let result_code = ch.get_exit_status().unwrap_or(0) as i32;
+            ch.close()?;
+            if result_code != 0 {
+                return Err(TransferError::ExitCode {
+                    code: result_code,
+                    reason: format!("rm command exited with status {result_code}"),
+                });
+            }
         }
         println!("File {} removed!", path.as_ref().to_slash_lossy());
         return Ok(());
