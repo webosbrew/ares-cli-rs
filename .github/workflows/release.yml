@@ -1,8 +1,9 @@
 name: Release
+run-name: "Release ${{ github.ref_name }}"
 
 on:
   release:
-    types: [created]
+    types: [ released ]
 
 jobs:
   release-ubuntu:
@@ -12,9 +13,6 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
-
-      - uses: olegtarasov/get-tag@v2.1.2
-        id: tagName
 
       - name: Update Packages
         shell: bash
@@ -44,7 +42,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          name: Release ${{ steps.tagName.outputs.tag }}
+          name: Release ${{ github.ref_name }}
           allowUpdates: true
           omitNameDuringUpdate: true
           omitBodyDuringUpdate: true
