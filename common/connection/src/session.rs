@@ -19,13 +19,47 @@ pub enum SessionError {
 
 impl NewSession for Device {
     fn new_session(&self) -> Result<Session, SessionError> {
+        let kex = vec![
+            "curve25519-sha256",
+            "curve25519-sha256@libssh.org",
+            "ecdh-sha2-nistp256",
+            "ecdh-sha2-nistp384",
+            "ecdh-sha2-nistp521",
+            "diffie-hellman-group18-sha512",
+            "diffie-hellman-group16-sha512",
+            "diffie-hellman-group-exchange-sha256",
+            "diffie-hellman-group14-sha256",
+            "diffie-hellman-group1-sha1",
+            "diffie-hellman-group14-sha1",
+        ];
+        let hmac = vec![
+            "hmac-sha2-256-etm@openssh.com",
+            "hmac-sha2-512-etm@openssh.com",
+            "hmac-sha2-256",
+            "hmac-sha2-512",
+            "hmac-sha1-96",
+            "hmac-sha1",
+            "hmac-md5",
+        ];
+        let key_types = vec![
+            "ssh-ed25519",
+            "ecdsa-sha2-nistp521",
+            "ecdsa-sha2-nistp384",
+            "ecdsa-sha2-nistp256",
+            "rsa-sha2-512",
+            "rsa-sha2-256",
+            "ssh-rsa",
+        ];
         let session = Session::new()?;
         session.set_option(SshOption::Timeout(Duration::from_secs(10)))?;
         session.set_option(SshOption::Hostname(self.host.clone()))?;
         session.set_option(SshOption::Port(self.port.clone()))?;
         session.set_option(SshOption::User(Some(self.username.clone())))?;
-        session.set_option(SshOption::HostKeys(format!("ssh-ed25519,ecdsa-sha2-nistp521,ecdsa-sha2-nistp384,ecdsa-sha2-nistp256,rsa-sha2-512,rsa-sha2-256,ssh-rsa")))?;
-        session.set_option(SshOption::PublicKeyAcceptedTypes(format!("ssh-ed25519,ecdsa-sha2-nistp521,ecdsa-sha2-nistp384,ecdsa-sha2-nistp256,rsa-sha2-512,rsa-sha2-256,ssh-rsa")))?;
+        session.set_option(SshOption::KeyExchange(kex.join(",")))?;
+        session.set_option(SshOption::HmacCS(hmac.join(",")))?;
+        session.set_option(SshOption::HmacSC(hmac.join(",")))?;
+        session.set_option(SshOption::HostKeys(key_types.join(",")))?;
+        session.set_option(SshOption::PublicKeyAcceptedTypes(key_types.join(",")))?;
         session.set_option(SshOption::ProcessConfig(false))?;
         #[cfg(windows)]
         {

@@ -8,3 +8,7 @@ members = [
     "ares-launch",
     "ares-device",
 ]
+
+[patch.crates-io]
+libssh-rs = { git = "https://github.com/mariotaku/libssh-rs.git", branch = "feature/more-auth-options" }
+libssh-rs-sys = { git = "https://github.com/mariotaku/libssh-rs.git", branch = "feature/more-auth-options" }
