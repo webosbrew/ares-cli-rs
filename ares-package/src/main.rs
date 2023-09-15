@@ -9,7 +9,7 @@ use clap::Parser;
 use serde::Serialize;
 
 use crate::input::data::DataInfo;
-use crate::input::validation::Validation;
+use crate::input::validation::{PackageArch, Validation};
 use crate::packaging::control::{AppendControl, ControlInfo};
 use crate::packaging::data::AppendData;
 use crate::packaging::header::AppendHeader;
@@ -34,6 +34,13 @@ struct Cli {
         help = "Exclude files, given as a PATTERN"
     )]
     app_exclude: Vec<String>,
+    #[arg(
+        short = 'A',
+        long,
+        value_name = "ARCH",
+        help = "Explicitly specify the architecture"
+    )]
+    force_arch: Option<PackageArch>,
     #[arg(help = "App directory containing a valid appinfo.json file.")]
     app_dir: PathBuf,
     #[arg(help = "Directory containing a valid services.json file")]
@@ -64,11 +71,24 @@ fn main() {
     let data = DataInfo::from_input(&app_dir, &cli.service_dir, &cli.app_exclude).unwrap();
     let package_info = &data.package;
     let validation = data.validate().unwrap();
-    let arch = validation.arch.unwrap_or_else(|| String::from("all"));
+    let arch = cli
+        .force_arch
+        .or_else(|| validation.arch.clone())
+        .unwrap_or_else(|| PackageArch::ALL);
+    if let Some(validation_arch) = &validation.arch {
+        if std::mem::discriminant(&arch) != std::mem::discriminant(validation_arch) {
+            eprintln!(
+                "Incompatible architecture: {} != {}",
+                arch.to_string(),
+                validation_arch.to_string()
+            );
+            return;
+        }
+    }
 
     let path = outdir.join(format!(
         "{}_{}_{}.ipk",
-        package_info.id, package_info.version, arch
+        package_info.id, package_info.version, arch.to_string()
     ));
     println!("Packaging {}...", path.to_string_lossy());
     let ipk_file = File::create(path).unwrap();
@@ -84,7 +104,7 @@ fn main() {
         package: package_info.id.clone(),
         version: package_info.version.clone(),
         installed_size: validation.size,
-        architecture: arch,
+        architecture: arch.to_string(),
     };
     ar.append_control(&control, mtime).unwrap();
     ar.append_data(&data, mtime).unwrap();

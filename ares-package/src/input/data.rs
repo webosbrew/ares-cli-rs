@@ -7,7 +7,7 @@ use regex::Regex;
 
 use crate::input::app::AppInfo;
 use crate::input::service::ServiceInfo;
-use crate::input::validation::{Validation, ValidationInfo};
+use crate::input::validation::{PackageArch, Validation, ValidationInfo};
 use crate::{PackageInfo, ParseFrom};
 
 #[derive(Debug)]
@@ -90,7 +90,7 @@ impl DataInfo {
 impl Validation for DataInfo {
     fn validate(&self) -> Result<ValidationInfo> {
         let app_validation = self.app.validate()?;
-        let mut archs = HashSet::<String>::new();
+        let mut archs = HashSet::<PackageArch>::new();
         let mut size_sum = self.package_data.len() as u64;
         if let Some(arch) = &app_validation.arch {
             archs.insert(arch.clone());
