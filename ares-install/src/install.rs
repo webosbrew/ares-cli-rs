@@ -58,6 +58,8 @@ impl InstallApp for Session {
             )
         })?;
         let ipk_path = format!("/media/developer/temp/ares_install_{}.ipk", &checksum[..10]);
+
+        self.mkdir(&mut Path::new("/media/developer/temp"), 0o777)?;
         self.put(&mut file, &ipk_path)?;
 
         let result = match self.subscribe(

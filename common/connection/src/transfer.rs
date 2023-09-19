@@ -1,11 +1,12 @@
 use std::io::{Error as IoError, Read, Write};
 use std::path::Path;
 
-use libssh_rs::Error as SshError;
 use libssh_rs::Session;
+use libssh_rs::{Error as SshError, FileType};
 use path_slash::PathExt;
 
 pub trait FileTransfer {
+    fn mkdir<P: AsRef<Path>>(&self, dir: &mut P, mode: u32) -> Result<(), TransferError>;
     fn put<P: AsRef<Path>, R: Read>(&self, source: &mut R, target: P) -> Result<(), TransferError>;
     fn get<P: AsRef<Path>, W: Write>(&self, source: P, target: &mut W)
         -> Result<(), TransferError>;
@@ -21,6 +22,46 @@ pub enum TransferError {
 }
 
 impl FileTransfer for Session {
+    fn mkdir<P: AsRef<Path>>(&self, dir: &mut P, mode: u32) -> Result<(), TransferError> {
+        println!("Creating directory {}...", dir.as_ref().to_slash_lossy());
+        if let Ok(sftp) = self.sftp() {
+            if let Ok(Some(file_type)) = sftp
+                .metadata(dir.as_ref().to_slash_lossy().as_ref())
+                .map(|m| m.file_type())
+            {
+                if file_type == FileType::Directory {
+                    return Ok(());
+                }
+                return Err(TransferError::ExitCode {
+                    code: 1,
+                    reason: format!(
+                        "File {} exists and is not a directory",
+                        dir.as_ref().to_slash_lossy()
+                    ),
+                });
+            }
+            sftp.create_dir(dir.as_ref().to_slash_lossy().as_ref(), mode)?;
+        } else {
+            let ch = self.new_channel()?;
+            ch.open_session()?;
+            ch.request_exec(&format!(
+                "mkdir -p {} && chmod {mode:o} {}",
+                snailquote::escape(dir.as_ref().to_slash_lossy().as_ref()),
+                snailquote::escape(dir.as_ref().to_slash_lossy().as_ref())
+            ))?;
+            ch.send_eof()?;
+            let result_code = ch.get_exit_status().unwrap_or(0) as i32;
+            ch.close()?;
+            if result_code != 0 {
+                return Err(TransferError::ExitCode {
+                    code: result_code,
+                    reason: format!("mkdir command exited with status {result_code}"),
+                });
+            }
+        }
+        println!("Directory {} created!", dir.as_ref().to_slash_lossy());
+        return Ok(());
+    }
     fn put<P: AsRef<Path>, R: Read>(&self, source: &mut R, target: P) -> Result<(), TransferError> {
         println!("Writing file to {}...", target.as_ref().to_slash_lossy());
         if let Ok(sftp) = self.sftp() {
