@@ -1,13 +1,19 @@
 use std::fmt::Debug;
 use std::io::Error as IoError;
+use std::ops::Deref;
 use std::time::Duration;
 
-use libssh_rs::{AuthStatus, Error as SshError, Session, SshKey, SshOption};
+use libssh_rs::{AuthStatus, Error as SshError, LogLevel, Session, SshKey, SshOption};
 
 use ares_device_lib::Device;
 
 pub trait NewSession {
-    fn new_session(&self) -> Result<Session, SessionError>;
+    fn new_session(&self) -> Result<DeviceSession, SessionError>;
+}
+
+pub struct DeviceSession {
+    pub device: Device,
+    pub session: Session,
 }
 
 #[derive(Debug)]
@@ -18,7 +24,7 @@ pub enum SessionError {
 }
 
 impl NewSession for Device {
-    fn new_session(&self) -> Result<Session, SessionError> {
+    fn new_session(&self) -> Result<DeviceSession, SessionError> {
         let kex = vec![
             "curve25519-sha256",
             "curve25519-sha256@libssh.org",
@@ -51,6 +57,7 @@ impl NewSession for Device {
             "ssh-rsa",
         ];
         let session = Session::new()?;
+        session.set_option(SshOption::LogLevel(LogLevel::Protocol))?;
         session.set_option(SshOption::Timeout(Duration::from_secs(10)))?;
         session.set_option(SshOption::Hostname(self.host.clone()))?;
         session.set_option(SshOption::Port(self.port.clone()))?;
@@ -96,7 +103,18 @@ impl NewSession for Device {
                 message: format!("Host needs authorization"),
             });
         }
-        return Ok(session);
+        return Ok(DeviceSession {
+            device: self.clone(),
+            session,
+        });
+    }
+}
+
+impl Deref for DeviceSession {
+    type Target = Session;
+
+    fn deref(&self) -> &Self::Target {
+        &self.session
     }
 }
 

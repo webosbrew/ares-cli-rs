@@ -59,7 +59,7 @@ pub enum PrivateKey {
         path: String,
     },
 }
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub enum FileTransfer {
     #[serde(rename = "stream")]
     Stream,

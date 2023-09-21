@@ -1,11 +1,16 @@
 use std::io::{Error as IoError, Read, Write};
 use std::path::Path;
 
-use libssh_rs::Session;
 use libssh_rs::{Error as SshError, FileType};
+use libssh_rs::Sftp;
 use path_slash::PathExt;
 
+use ares_device_lib::FileTransfer::Stream;
+
+use crate::session::DeviceSession;
+
 pub trait FileTransfer {
+    fn maybe_sftp(&self) -> Result<Sftp, libssh_rs::Error>;
     fn mkdir<P: AsRef<Path>>(&self, dir: &mut P, mode: u32) -> Result<(), TransferError>;
     fn put<P: AsRef<Path>, R: Read>(&self, source: &mut R, target: P) -> Result<(), TransferError>;
     fn get<P: AsRef<Path>, W: Write>(&self, source: P, target: &mut W)
@@ -21,10 +26,17 @@ pub enum TransferError {
     Io(IoError),
 }
 
-impl FileTransfer for Session {
+impl FileTransfer for DeviceSession {
+    fn maybe_sftp(&self) -> Result<Sftp, libssh_rs::Error> {
+        if Some(Stream) == self.device.files {
+            return Err(libssh_rs::Error::RequestDenied(
+                "SFTP is not supported".to_string(),
+            ));
+        }
+        return self.sftp();
+    }
     fn mkdir<P: AsRef<Path>>(&self, dir: &mut P, mode: u32) -> Result<(), TransferError> {
-        println!("Creating directory {}...", dir.as_ref().to_slash_lossy());
-        if let Ok(sftp) = self.sftp() {
+        if let Ok(sftp) = self.maybe_sftp() {
             if let Ok(Some(file_type)) = sftp
                 .metadata(dir.as_ref().to_slash_lossy().as_ref())
                 .map(|m| m.file_type())
@@ -40,6 +52,7 @@ impl FileTransfer for Session {
                     ),
                 });
             }
+            println!("Creating directory {}...", dir.as_ref().to_slash_lossy());
             sftp.create_dir(dir.as_ref().to_slash_lossy().as_ref(), mode)?;
         } else {
             let ch = self.new_channel()?;
@@ -64,7 +77,7 @@ impl FileTransfer for Session {
     }
     fn put<P: AsRef<Path>, R: Read>(&self, source: &mut R, target: P) -> Result<(), TransferError> {
         println!("Writing file to {}...", target.as_ref().to_slash_lossy());
-        if let Ok(sftp) = self.sftp() {
+        if let Ok(sftp) = self.maybe_sftp() {
             let mut file = sftp.open(
                 target.as_ref().to_slash_lossy().as_ref(),
                 0o1101, /*O_WRONLY | O_CREAT | O_TRUNC on Linux*/
@@ -99,7 +112,7 @@ impl FileTransfer for Session {
         target: &mut W,
     ) -> Result<(), TransferError> {
         println!("Reading file from {}...", source.as_ref().to_slash_lossy());
-        if let Ok(sftp) = self.sftp() {
+        if let Ok(sftp) = self.maybe_sftp() {
             let mut file = sftp.open(source.as_ref().to_slash_lossy().as_ref(), 0, 0)?;
             std::io::copy(&mut file, target)?;
         } else {
@@ -128,7 +141,7 @@ impl FileTransfer for Session {
 
     fn rm<P: AsRef<Path>>(&self, path: P) -> Result<(), TransferError> {
         println!("Removing file {}...", path.as_ref().to_slash_lossy());
-        if let Ok(sftp) = self.sftp() {
+        if let Ok(sftp) = self.maybe_sftp() {
             sftp.remove_file(path.as_ref().to_slash_lossy().as_ref())?;
         } else {
             let ch = self.new_channel()?;

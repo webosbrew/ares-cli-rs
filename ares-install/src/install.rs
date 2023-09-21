@@ -2,12 +2,12 @@ use std::fs::File;
 use std::io::{Error as IoError, ErrorKind};
 use std::path::Path;
 
-use libssh_rs::Session;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Error as JsonError;
 
 use ares_connection_lib::luna::{Luna, LunaError, Message};
+use ares_connection_lib::session::DeviceSession;
 use ares_connection_lib::transfer::{FileTransfer, TransferError};
 
 pub(crate) trait InstallApp {
@@ -44,7 +44,7 @@ struct InstallResponseDetails {
     reason: Option<String>,
 }
 
-impl InstallApp for Session {
+impl InstallApp for DeviceSession {
     fn install_app<P: AsRef<Path>>(&self, package: P) -> Result<String, InstallError> {
         let mut file = File::open(&package)?;
         let checksum = sha256::try_digest(package.as_ref()).map_err(|e| {
