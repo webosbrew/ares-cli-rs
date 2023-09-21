@@ -57,7 +57,6 @@ impl NewSession for Device {
             "ssh-rsa",
         ];
         let session = Session::new()?;
-        session.set_option(SshOption::LogLevel(LogLevel::Protocol))?;
         session.set_option(SshOption::Timeout(Duration::from_secs(10)))?;
         session.set_option(SshOption::Hostname(self.host.clone()))?;
         session.set_option(SshOption::Port(self.port.clone()))?;
