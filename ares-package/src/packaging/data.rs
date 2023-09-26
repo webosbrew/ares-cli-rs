@@ -91,7 +91,6 @@ where
         if !dir.ends_with('/') {
             dir.push('/');
         }
-        header.set_path(&dir)?;
         header.set_entry_type(EntryType::Directory);
         header.set_mode(0o100775);
         header.set_size(0);
@@ -100,7 +99,7 @@ where
         header.set_mtime(mtime);
         header.set_cksum();
         println!("Adding {path}", path = dir);
-        tar.append(&header, empty.deref())?;
+        tar.append_data(&mut header, &dir, empty.deref())?;
     }
     return Ok(());
 }
@@ -163,7 +162,6 @@ where
             tar.append_link(&mut header, tar_path, link_target)?;
         } else if entry_type.is_file() {
             let mut header = TarHeader::new_gnu();
-            header.set_path(&tar_path)?;
             header.set_metadata(&entry_metadata);
             header.set_uid(0);
             header.set_gid(5000);
@@ -189,14 +187,13 @@ where
     append_dirs(tar, &package_dir, dir_entries, mtime)?;
     let mut header = TarHeader::new_gnu();
     let pkg_info_path = format!("usr/palm/packages/{}/packageinfo.json", info.id);
-    header.set_path(&pkg_info_path)?;
     header.set_mode(0o100644);
     header.set_size(details.package_data.len() as u64);
     header.set_mtime(mtime);
     header.set_uid(0);
     header.set_gid(5000);
     header.set_cksum();
-    tar.append(&header, details.package_data.deref())?;
+    tar.append_data(&mut header, &pkg_info_path, details.package_data.deref())?;
     println!("Adding {path}", path = pkg_info_path);
     return Ok(());
 }
