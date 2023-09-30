@@ -3,6 +3,7 @@ use std::process::exit;
 
 use clap::Parser;
 
+use crate::remove::RemoveApp;
 use ares_connection_lib::session::NewSession;
 use ares_device_lib::DeviceManager;
 use install::InstallApp;
@@ -10,6 +11,7 @@ use list::ListApps;
 
 mod install;
 mod list;
+mod remove;
 
 #[derive(Parser, Debug)]
 #[command(about)]
@@ -54,20 +56,14 @@ fn main() {
         session.list_apps();
     } else if let Some(id) = cli.remove {
         println!("Removing {id}...");
-    } else if let Some(package) = cli.package {
-        if let Some(file_name) = package.file_name() {
-            println!(
-                "Installing {} on {}...",
-                file_name.to_string_lossy(),
-                device.name
-            );
-        } else {
-            println!(
-                "Installing {} on {}...",
-                package.to_string_lossy(),
-                device.name
-            );
+        match session.remove_app(&id) {
+            Ok(_) => println!("{id} removed."),
+            Err(e) => {
+                eprintln!("Failed to remove {id}: {e:?}");
+                exit(1);
+            }
         }
+    } else if let Some(package) = cli.package {
         match session.install_app(package) {
             Ok(package_id) => println!("{package_id} installed."),
             Err(e) => {

@@ -1,7 +1,10 @@
+use std::fmt::Write;
 use std::fs::File;
 use std::io::{Error as IoError, ErrorKind};
 use std::path::Path;
+use std::time::Duration;
 
+use indicatif::{ProgressBar, ProgressStyle};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Error as JsonError;
@@ -47,6 +50,7 @@ struct InstallResponseDetails {
 impl InstallApp for DeviceSession {
     fn install_app<P: AsRef<Path>>(&self, package: P) -> Result<String, InstallError> {
         let mut file = File::open(&package)?;
+        let file_size = file.metadata()?.len();
         let checksum = sha256::try_digest(package.as_ref()).map_err(|e| {
             IoError::new(
                 ErrorKind::Other,
@@ -59,8 +63,41 @@ impl InstallApp for DeviceSession {
         })?;
         let ipk_path = format!("/media/developer/temp/ares_install_{}.ipk", &checksum[..10]);
 
+        let package_display_name = package
+            .as_ref()
+            .file_name()
+            .map(|s| s.to_string_lossy())
+            .unwrap_or_else(|| package.as_ref().to_string_lossy());
+
         self.mkdir(&mut Path::new("/media/developer/temp"), 0o777)?;
-        self.put(&mut file, &ipk_path)?;
+
+        let pb = ProgressBar::new(file_size);
+        pb.suspend(|| {
+            println!(
+                "Uploading {} to {}...",
+                package_display_name, self.device.name
+            )
+        });
+        pb.enable_steady_tick(Duration::from_millis(50));
+        pb.set_prefix("Uploading");
+        pb.set_style(ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {percent}% [{wide_bar}] {bytes}/{total_bytes}  {eta} ETA")
+            .unwrap());
+
+        self.put(&mut file, &ipk_path, |transferred| {
+            pb.set_position(transferred as u64);
+        })?;
+
+        pb.suspend(|| {
+            println!(
+                "Installing {} on {}...",
+                package_display_name, self.device.name
+            )
+        });
+        pb.set_prefix("Installing");
+
+        let spinner_style =
+            ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}").unwrap();
+        pb.set_style(spinner_style);
 
         let result = match self.subscribe(
             "luna://com.webos.appInstallService/dev/install",
@@ -72,10 +109,24 @@ impl InstallApp for DeviceSession {
             true,
         ) {
             Ok(subscription) => subscription
-                .filter_map(|item| map_install_message(item))
+                .filter_map(|item| {
+                    map_installer_message(
+                        item,
+                        &Regex::new(r"(?i)installed").unwrap(),
+                        |progress| {
+                            pb.set_message(
+                                progress
+                                    .strip_prefix("installing : ")
+                                    .unwrap_or(&progress)
+                                    .to_string(),
+                            );
+                        },
+                    )
+                })
                 .next(),
             Err(e) => Some(Err(e.into())),
         };
+        pb.finish_and_clear();
 
         if let Err(e) = self.rm(&ipk_path) {
             eprintln!("Failed to delete {}: {:?}", ipk_path, e);
@@ -85,7 +136,11 @@ impl InstallApp for DeviceSession {
     }
 }
 
-fn map_install_message(item: std::io::Result<Message>) -> Option<Result<String, InstallError>> {
+pub(crate) fn map_installer_message<F: Fn(String)>(
+    item: std::io::Result<Message>,
+    expected: &Regex,
+    progress: F,
+) -> Option<Result<String, InstallError>> {
     return match item {
         Ok(message) => match message.deserialize::<InstallResponse>() {
             Ok(resp) => {
@@ -97,11 +152,11 @@ fn map_install_message(item: std::io::Result<Message>) -> Option<Result<String, 
                                 reason: details.reason.unwrap_or(String::from("unknown error")),
                             }));
                         } else if Regex::new(r"(?i)^SUCCESS").unwrap().is_match(&state)
-                            || Regex::new(r"(?i)installed").unwrap().is_match(&state)
+                            || expected.is_match(&state)
                         {
                             return Some(Ok(details.package_id.unwrap_or(String::from(""))));
                         } else {
-                            println!("Install: {}", state);
+                            progress(state);
                         }
                     }
                 }

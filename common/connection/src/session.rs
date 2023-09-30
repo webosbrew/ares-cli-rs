@@ -3,7 +3,7 @@ use std::io::Error as IoError;
 use std::ops::Deref;
 use std::time::Duration;
 
-use libssh_rs::{AuthStatus, Error as SshError, LogLevel, Session, SshKey, SshOption};
+use libssh_rs::{AuthStatus, Error as SshError, Session, SshKey, SshOption};
 
 use ares_device_lib::Device;
 
