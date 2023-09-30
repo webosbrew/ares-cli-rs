@@ -47,8 +47,19 @@ impl Iterator for Subscription {
 
 impl Drop for Subscription {
     fn drop(&mut self) {
-        self.ch.send_eof().unwrap_or(());
-        self.ch.request_send_signal("TERM").unwrap_or(());
-        self.ch.close().unwrap_or(());
+        self.close().unwrap_or_else(|e| {
+            eprintln!("Failed to close subscription: {e:?}");
+            return 0;
+        });
+    }
+}
+
+impl Subscription {
+    fn close(&mut self) -> Result<i32, Error> {
+        self.ch.send_eof()?;
+        self.ch.request_send_signal("TERM")?;
+        let status = self.ch.get_exit_status();
+        self.ch.close()?;
+        return Ok(status.unwrap_or(-1) as i32);
     }
 }

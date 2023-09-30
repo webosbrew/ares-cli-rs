@@ -65,7 +65,7 @@ fn main() {
         }
     } else if let Some(package) = cli.package {
         match session.install_app(package) {
-            Ok(package_id) => println!("{package_id} installed."),
+            Ok(_) => {}
             Err(e) => {
                 eprintln!("Failed to install: {e:?}");
                 exit(1);

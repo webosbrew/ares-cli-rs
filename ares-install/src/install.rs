@@ -14,7 +14,7 @@ use ares_connection_lib::session::DeviceSession;
 use ares_connection_lib::transfer::{FileTransfer, TransferError};
 
 pub(crate) trait InstallApp {
-    fn install_app<P: AsRef<Path>>(&self, package: P) -> Result<String, InstallError>;
+    fn install_app<P: AsRef<Path>>(&self, package: P) -> Result<(), InstallError>;
 }
 
 #[derive(Debug)]
@@ -48,7 +48,7 @@ struct InstallResponseDetails {
 }
 
 impl InstallApp for DeviceSession {
-    fn install_app<P: AsRef<Path>>(&self, package: P) -> Result<String, InstallError> {
+    fn install_app<P: AsRef<Path>>(&self, package: P) -> Result<(), InstallError> {
         let mut file = File::open(&package)?;
         let file_size = file.metadata()?.len();
         let checksum = sha256::try_digest(package.as_ref()).map_err(|e| {
@@ -80,7 +80,7 @@ impl InstallApp for DeviceSession {
         });
         pb.enable_steady_tick(Duration::from_millis(50));
         pb.set_prefix("Uploading");
-        pb.set_style(ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {percent}% [{wide_bar}] {bytes}/{total_bytes}  {eta} ETA")
+        pb.set_style(ProgressStyle::with_template("{prefix:10.bold.dim} {spinner} {percent:>3}% [{wide_bar}] {bytes}/{total_bytes}  {eta} ETA")
             .unwrap());
 
         self.put(&mut file, &ipk_path, |transferred| {
@@ -96,7 +96,7 @@ impl InstallApp for DeviceSession {
         pb.set_prefix("Installing");
 
         let spinner_style =
-            ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}").unwrap();
+            ProgressStyle::with_template("{prefix:10.bold.dim} {spinner} {wide_msg}").unwrap();
         pb.set_style(spinner_style);
 
         let result = match self.subscribe(
@@ -123,16 +123,28 @@ impl InstallApp for DeviceSession {
                         },
                     )
                 })
-                .next(),
-            Err(e) => Some(Err(e.into())),
+                .next()
+                .unwrap_or_else(|| Ok(String::new())),
+            Err(e) => Err(e.into()),
         };
-        pb.finish_and_clear();
+
+        if let Ok(package_id) = &result {
+            pb.suspend(|| println!("Installed package {}!", package_id));
+        }
+        pb.suspend(|| println!("Deleting uploaded package..."));
+
+        pb.set_prefix("Cleanup");
+        pb.set_message("Deleting uploaded package");
 
         if let Err(e) = self.rm(&ipk_path) {
-            eprintln!("Failed to delete {}: {:?}", ipk_path, e);
+            pb.suspend(|| {
+                eprintln!("Failed to delete {}: {:?}", ipk_path, e);
+            });
         }
+        pb.finish_and_clear();
 
-        return result.unwrap();
+        result?;
+        return Ok(());
     }
 }
 
