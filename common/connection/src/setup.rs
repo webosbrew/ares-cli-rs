@@ -19,14 +19,14 @@ impl DeviceSetupManager for DeviceManager {
                 )
             })?;
 
-        return match SshKey::from_privkey_base64(&content, Some(passphrase)) {
+        match SshKey::from_privkey_base64(&content, Some(passphrase)) {
             Ok(_) => Ok(content),
             _ => Err(if passphrase.is_empty() {
-                Error::new(ErrorKind::Other, format!("Passphrase is empty"))
+                Error::new(ErrorKind::Other, "Passphrase is empty".to_string())
             } else {
-                Error::new(ErrorKind::Other, format!("Passphrase is incorrect"))
+                Error::new(ErrorKind::Other, "Passphrase is incorrect".to_string())
             }),
-        };
+        }
     }
 
     fn localkey_verify(&self, name: &str, passphrase: &str) -> Result<(), Error> {

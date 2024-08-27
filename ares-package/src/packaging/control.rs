@@ -40,34 +40,25 @@ where
         let mut ar_header = ArHeader::new(b"control.tar.gz".to_vec(), control_tar_gz.len() as u64);
         ar_header.set_mode(0o100644);
         ar_header.set_mtime(mtime);
-        return self.append(&ar_header, Cursor::new(control_tar_gz));
+        self.append(&ar_header, Cursor::new(control_tar_gz))
     }
 }
 
 impl Display for ControlInfo {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("Package: {}\n", self.package))
-            .unwrap();
-        f.write_fmt(format_args!("Version: {}\n", self.version))
-            .unwrap();
-        f.write_fmt(format_args!("Section: {}\n", "misc")).unwrap();
-        f.write_fmt(format_args!("Priority: {}\n", "optional"))
-            .unwrap();
-        f.write_fmt(format_args!("Architecture: {}\n", self.architecture))
-            .unwrap();
-        f.write_fmt(format_args!("Installed-Size: {}\n", self.installed_size))
-            .unwrap();
-        f.write_fmt(format_args!("Maintainer: {}\n", "N/A <nobody@example.com>"))
-            .unwrap();
+        f.write_fmt(format_args!("Package: {}\n", self.package))?;
+        f.write_fmt(format_args!("Version: {}\n", self.version))?;
+        f.write_fmt(format_args!("Section: {}\n", "misc"))?;
+        f.write_fmt(format_args!("Priority: {}\n", "optional"))?;
+        f.write_fmt(format_args!("Architecture: {}\n", self.architecture))?;
+        f.write_fmt(format_args!("Installed-Size: {}\n", self.installed_size))?;
+        f.write_fmt(format_args!("Maintainer: {}\n", "N/A <nobody@example.com>"))?;
         f.write_fmt(format_args!(
             "Description: {}\n",
             "This is a webOS application."
-        ))
-        .unwrap();
-        f.write_fmt(format_args!("webOS-Package-Format-Version: {}\n", 2))
-            .unwrap();
-        f.write_fmt(format_args!("webOS-Packager-Version: {}\n", "x.y.x"))
-            .unwrap();
-        return Ok(());
+        ))?;
+        f.write_fmt(format_args!("webOS-Package-Format-Version: {}\n", 2))?;
+        f.write_fmt(format_args!("webOS-Packager-Version: {}\n", "x.y.x"))?;
+        Ok(())
     }
 }

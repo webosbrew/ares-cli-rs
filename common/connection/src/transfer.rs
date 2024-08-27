@@ -1,8 +1,8 @@
 use std::io::{Error as IoError, Read, Write};
 use std::path::Path;
 
-use libssh_rs::Sftp;
 use libssh_rs::{Error as SshError, FileType};
+use libssh_rs::{OpenFlags, Sftp};
 use path_slash::PathExt;
 
 use ares_device_lib::FileTransfer::Stream;
@@ -38,7 +38,7 @@ impl FileTransfer for DeviceSession {
                 "SFTP is not supported".to_string(),
             ));
         }
-        return self.sftp();
+        self.sftp()
     }
     fn mkdir<P: AsRef<Path>>(&self, dir: &mut P, mode: u32) -> Result<(), TransferError> {
         if let Ok(sftp) = self.maybe_sftp() {
@@ -76,7 +76,7 @@ impl FileTransfer for DeviceSession {
                 });
             }
         }
-        return Ok(());
+        Ok(())
     }
 
     fn put<P: AsRef<Path>, R: Read, F: Fn(usize)>(
@@ -88,7 +88,7 @@ impl FileTransfer for DeviceSession {
         if let Ok(sftp) = self.maybe_sftp() {
             let mut file = sftp.open(
                 target.as_ref().to_slash_lossy().as_ref(),
-                0o1101, /*O_WRONLY | O_CREAT | O_TRUNC on Linux*/
+                OpenFlags::READ_ONLY | OpenFlags::CREATE | OpenFlags::TRUNCATE,
                 0o644,
             )?;
             copy_with_progress(source, &mut file, progress)?;
@@ -110,7 +110,7 @@ impl FileTransfer for DeviceSession {
                 });
             }
         }
-        return Ok(());
+        Ok(())
     }
 
     fn get<P: AsRef<Path>, W: Write>(
@@ -119,7 +119,11 @@ impl FileTransfer for DeviceSession {
         target: &mut W,
     ) -> Result<(), TransferError> {
         if let Ok(sftp) = self.maybe_sftp() {
-            let mut file = sftp.open(source.as_ref().to_slash_lossy().as_ref(), 0, 0)?;
+            let mut file = sftp.open(
+                source.as_ref().to_slash_lossy().as_ref(),
+                OpenFlags::READ_ONLY,
+                0,
+            )?;
             std::io::copy(&mut file, target)?;
         } else {
             let ch = self.new_channel()?;
@@ -138,7 +142,7 @@ impl FileTransfer for DeviceSession {
                 });
             }
         }
-        return Ok(());
+        Ok(())
     }
 
     fn rm<P: AsRef<Path>>(&self, path: P) -> Result<(), TransferError> {
@@ -161,7 +165,7 @@ impl FileTransfer for DeviceSession {
                 });
             }
         }
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -192,5 +196,5 @@ fn copy_with_progress<R: Read, W: Write, F: Fn(usize)>(
         total += read;
         progress(total);
     }
-    return Ok(());
+    Ok(())
 }

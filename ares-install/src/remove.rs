@@ -37,6 +37,6 @@ impl RemoveApp for DeviceSession {
             Err(e) => Some(Err(e.into())),
         };
 
-        return result.unwrap();
+        result.unwrap()
     }
 }

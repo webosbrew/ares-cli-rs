@@ -69,8 +69,8 @@ impl NewSession for Device {
         session.set_option(SshOption::ProcessConfig(false))?;
         #[cfg(windows)]
         {
-            session.set_option(SshOption::KnownHosts(Some(format!("C:\\nul"))))?;
-            session.set_option(SshOption::GlobalKnownHosts(Some(format!("C:\\nul"))))?;
+            session.set_option(SshOption::KnownHosts(Some("C:\\nul".to_string())))?;
+            session.set_option(SshOption::GlobalKnownHosts(Some("C:\\nul".to_string())))?;
         }
 
         #[cfg(not(windows))]
@@ -88,24 +88,24 @@ impl NewSession for Device {
 
             if session.userauth_publickey(None, &priv_key)? != AuthStatus::Success {
                 return Err(SessionError::Authorization {
-                    message: format!("Key authorization failed"),
+                    message: "Key authorization failed".to_string(),
                 });
             }
         } else if let Some(password) = &self.password {
             if session.userauth_password(None, Some(password))? != AuthStatus::Success {
                 return Err(SessionError::Authorization {
-                    message: format!("Bad SSH password"),
+                    message: "Bad SSH password".to_string(),
                 });
             }
         } else if session.userauth_none(None)? != AuthStatus::Success {
             return Err(SessionError::Authorization {
-                message: format!("Host needs authorization"),
+                message: "Host needs authorization".to_string(),
             });
         }
-        return Ok(DeviceSession {
+        Ok(DeviceSession {
             device: self.clone(),
             session,
-        });
+        })
     }
 }
 

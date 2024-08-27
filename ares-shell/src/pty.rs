@@ -11,7 +11,7 @@ use libssh_rs::Error::TryAgain;
 use libssh_rs::{Channel, Error};
 
 pub(crate) fn shell(ch: Channel) -> Result<i32, std::io::Error> {
-    terminal::enable_raw_mode().unwrap();
+    terminal::enable_raw_mode()?;
     let (tx, rx) = unbounded::<Event>();
     let events = EventThread::new(tx);
     let mut buf = [0; 1024];
@@ -30,7 +30,7 @@ pub(crate) fn shell(ch: Channel) -> Result<i32, std::io::Error> {
                 Ok(Event::Resize(width, height)) => {
                     ch.change_pty_size(width as u32, height as u32)?;
                 }
-                Ok(e) => {
+                Ok(_) => {
                 }
                 Err(_) => {
                     break;
@@ -57,7 +57,7 @@ pub(crate) fn shell(ch: Channel) -> Result<i32, std::io::Error> {
         }
     }
     drop(events);
-    return Ok(ch.get_exit_status().unwrap_or(-1) as i32);
+    Ok(ch.get_exit_status().unwrap_or(-1) as i32)
 }
 
 fn send_key<Stdin: Write>(stdin: &mut Stdin, key: &KeyEvent) -> Result<(), Error> {
@@ -127,7 +127,7 @@ fn send_key<Stdin: Write>(stdin: &mut Stdin, key: &KeyEvent) -> Result<(), Error
         }
         _ => {}
     }
-    return Ok(());
+    Ok(())
 }
 
 struct EventThread {

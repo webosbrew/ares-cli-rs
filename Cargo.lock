@@ -151,6 +151,7 @@ dependencies = [
  "clap",
  "common-connection",
  "common-device",
+ "libssh-rs",
  "path-slash",
  "walkdir",
 ]

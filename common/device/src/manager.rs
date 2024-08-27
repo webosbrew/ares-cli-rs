@@ -7,12 +7,12 @@ use crate::{Device, DeviceManager, PrivateKey};
 
 impl DeviceManager {
     pub fn list(&self) -> Result<Vec<Device>, Error> {
-        return read();
+        read()
     }
 
     pub fn find_or_default<S: AsRef<str>>(&self, name: Option<S>) -> Result<Option<Device>, Error> {
         let devices = self.list()?;
-        return Ok(devices
+        Ok(devices
             .iter()
             .find(|d| {
                 if let Some(name) = &name {
@@ -21,7 +21,7 @@ impl DeviceManager {
                     d.default.unwrap_or(false)
                 }
             })
-            .cloned());
+            .cloned())
     }
 
     pub fn set_default(&self, name: &str) -> Result<Option<Device>, Error> {
@@ -37,7 +37,7 @@ impl DeviceManager {
         }
         log::trace!("{:?}", devices);
         write(devices)?;
-        return Ok(result);
+        Ok(result)
     }
 
     pub fn add(&self, device: &Device) -> Result<Device, Error> {
@@ -60,7 +60,7 @@ impl DeviceManager {
         let mut devices = read()?;
         devices.push(device.clone());
         write(devices.clone())?;
-        return Ok(device);
+        Ok(device)
     }
 
     pub fn remove(&self, name: &str, remove_key: bool) -> Result<(), Error> {
@@ -89,6 +89,6 @@ impl DeviceManager {
             will_keep.first_mut().unwrap().default = Some(true);
         }
         write(will_keep)?;
-        return Ok(());
+        Ok(())
     }
 }

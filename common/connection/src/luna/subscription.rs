@@ -36,12 +36,12 @@ impl Iterator for Subscription {
                 break;
             }
         }
-        return Some(
+        Some(
             item.map_err(|e| {
                 Error::new(ErrorKind::InvalidData, format!("Bad JSON response: {e:?}"))
             })
             .map(|value| Message { value }),
-        );
+        )
     }
 }
 
@@ -60,6 +60,6 @@ impl Subscription {
         self.ch.request_send_signal("TERM")?;
         let status = self.ch.get_exit_status();
         self.ch.close()?;
-        return Ok(status.unwrap_or(-1) as i32);
+        Ok(status.unwrap_or(-1) as i32)
     }
 }

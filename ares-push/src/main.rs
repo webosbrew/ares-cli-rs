@@ -8,6 +8,7 @@ use walkdir::WalkDir;
 
 use ares_connection_lib::session::NewSession;
 use ares_device_lib::DeviceManager;
+use libssh_rs::OpenFlags;
 
 #[derive(Parser, Debug)]
 #[command(about)]
@@ -56,14 +57,16 @@ fn main() {
             match entry {
                 Ok(entry) => {
                     let file_type = entry.file_type();
-                    let dest_path = dest_base.join(entry.path().strip_prefix(source_prefix).unwrap());
+                    let dest_path =
+                        dest_base.join(entry.path().strip_prefix(source_prefix).unwrap());
                     if file_type.is_dir() {
                         println!(
                             "{} => {}",
                             entry.path().to_string_lossy(),
                             dest_path.to_slash_lossy()
                         );
-                        sftp.create_dir(dest_path.to_slash_lossy().as_ref(), 0o755).unwrap_or(());
+                        sftp.create_dir(dest_path.to_slash_lossy().as_ref(), 0o755)
+                            .unwrap_or(());
                     } else if file_type.is_file() {
                         println!(
                             "{} => {}",
@@ -72,7 +75,7 @@ fn main() {
                         );
                         let mut file = match sftp.open(
                             dest_path.to_slash_lossy().as_ref(),
-                            0o1101, /*O_WRONLY | O_CREAT | O_TRUNC*/
+                            OpenFlags::READ_ONLY | OpenFlags::CREATE | OpenFlags::TRUNCATE,
                             0o644,
                         ) {
                             Ok(file) => file,

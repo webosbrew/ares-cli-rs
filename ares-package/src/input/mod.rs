@@ -14,7 +14,7 @@ pub(crate) fn filter_by_excludes(entry: &DirEntry, excludes: Option<&Regex>) -> 
     if let Some(exclude) = excludes {
         return !exclude.is_match(entry.path().to_slash_lossy().as_ref());
     }
-    return true;
+    true
 }
 
 pub(crate) fn dir_size<P: AsRef<Path>>(path: P, excludes: Option<&Regex>) -> Result<u64> {
@@ -27,5 +27,5 @@ pub(crate) fn dir_size<P: AsRef<Path>>(path: P, excludes: Option<&Regex>) -> Res
         let entry = entry?;
         size += entry.metadata()?.len();
     }
-    return Ok(size);
+    Ok(size)
 }

@@ -14,11 +14,11 @@ pub struct ServiceInfo {
 
 impl ParseFrom for ServiceInfo {
     fn parse_from<R: Read>(reader: R) -> Result<ServiceInfo> {
-        return serde_json::from_reader(reader).map_err(|e| {
+        serde_json::from_reader(reader).map_err(|e| {
             Error::new(
                 ErrorKind::InvalidData,
                 format!("Invalid services.json: {e:?}"),
             )
-        });
+        })
     }
 }

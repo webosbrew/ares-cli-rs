@@ -58,7 +58,7 @@ where
         let mut ar_header = ArHeader::new(b"data.tar.gz".to_vec(), data_tar_gz.len() as u64);
         ar_header.set_mode(0o100644);
         ar_header.set_mtime(mtime);
-        return self.append(&ar_header, Cursor::new(data_tar_gz));
+        self.append(&ar_header, Cursor::new(data_tar_gz))
     }
 }
 
@@ -101,7 +101,7 @@ where
         println!("Adding {path}", path = dir);
         tar.append_data(&mut header, &dir, empty.deref())?;
     }
-    return Ok(());
+    Ok(())
 }
 
 fn tar_path<S, P>(prefix: S, path: P) -> PathBuf
@@ -109,11 +109,11 @@ where
     S: AsRef<str>,
     P: AsRef<Path>,
 {
-    return PathBuf::from(format!(
+    PathBuf::from(format!(
         "{}{}",
         prefix.as_ref(),
         path.as_ref().to_slash_lossy()
-    ));
+    ))
 }
 
 fn append_tree<W, S, P>(
@@ -170,7 +170,7 @@ where
             tar.append_data(&mut header, tar_path, &mut File::open(entry_path)?)?;
         }
     }
-    return Ok(());
+    Ok(())
 }
 
 fn append_package_info<W>(
@@ -195,5 +195,5 @@ where
     header.set_cksum();
     tar.append_data(&mut header, &pkg_info_path, details.package_data.deref())?;
     println!("Adding {path}", path = pkg_info_path);
-    return Ok(());
+    Ok(())
 }

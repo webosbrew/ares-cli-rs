@@ -39,28 +39,30 @@ impl PickPrompt for PickPromptWindows {
 
         nwg::dispatch_thread_events();
 
-        return devices
+        devices
             .get(ui.index.lock().unwrap().clone() as usize)
-            .map(|d| d.as_ref().clone());
+            .map(|d| d.as_ref().clone())
     }
 }
 
 #[derive(Default, NwgUi)]
 pub struct PickPromptApp {
-    #[nwg_control(size: (400, 500), center: true, topmost:true, title: "Select Device", flags: "WINDOW|VISIBLE")]
-    #[nwg_events( OnWindowClose: [PickPromptApp::on_close] )]
+    #[nwg_control(size: (400, 500), center: true, topmost:true, title: "Select Device", flags: "WINDOW|VISIBLE"
+    )]
+    #[nwg_events( OnWindowClose: [PickPromptApp::on_close])]
     window: nwg::Window,
 
     #[nwg_control(size: (380, 420), position: (10, 10))]
-    #[nwg_events( OnListBoxSelect: [PickPromptApp::on_selection_change], OnListBoxDoubleClick: [PickPromptApp::on_confirm] )]
+    #[nwg_events( OnListBoxSelect: [PickPromptApp::on_selection_change], OnListBoxDoubleClick: [PickPromptApp::on_confirm]
+    )]
     devices: nwg::ListBox<DeviceEntry>,
 
     #[nwg_control(text: "Select", size: (185, 60), position: (10, 420), enabled: false)]
-    #[nwg_events( OnButtonClick: [PickPromptApp::on_confirm] )]
+    #[nwg_events( OnButtonClick: [PickPromptApp::on_confirm])]
     ok: nwg::Button,
 
     #[nwg_control(text: "Cancel", size: (185, 60), position: (205, 420))]
-    #[nwg_events( OnButtonClick: [PickPromptApp::on_cancel] )]
+    #[nwg_events( OnButtonClick: [PickPromptApp::on_cancel])]
     cancel: nwg::Button,
 
     index: Mutex<i32>,
@@ -73,11 +75,11 @@ struct DeviceEntry {
 
 impl Display for DeviceEntry {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        return if let Some(device) = &self.device {
+        if let Some(device) = &self.device {
             f.write_str(&device.name)
         } else {
             f.write_str("<none>")
-        };
+        }
     }
 }
 

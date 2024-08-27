@@ -47,7 +47,7 @@ pub(crate) fn shell(ch: Channel) -> Result<i32, Error> {
                         }
                     }
                     Err(e) => {
-                        return Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()));
+                        return Err(Error::new(std::io::ErrorKind::Other, e.to_string()));
                     }
                 }
                 stderr = !stderr;
@@ -55,7 +55,7 @@ pub(crate) fn shell(ch: Channel) -> Result<i32, Error> {
         }
     }
     drop(events);
-    return Ok(ch.get_exit_status().unwrap_or(-1) as i32);
+    Ok(ch.get_exit_status().unwrap_or(-1) as i32)
 }
 
 struct EventThread {

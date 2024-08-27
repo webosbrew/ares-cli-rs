@@ -1,11 +1,12 @@
+use std::fmt::Display;
 use std::fs::File;
 use std::io::{Error, ErrorKind, Result};
 use std::path::Path;
 use std::str::FromStr;
 
-use elf::ElfStream;
 use elf::endian::AnyEndian;
 use elf::to_str::e_machine_to_string;
+use elf::ElfStream;
 
 use crate::input::app::AppInfo;
 use crate::input::data::ComponentInfo;
@@ -35,7 +36,7 @@ impl Validation for ComponentInfo<AppInfo> {
         if self.info.r#type == "native" {
             arch = infer_arch(self.path.join(&self.info.main))?;
         }
-        return Ok(ValidationInfo { arch, size });
+        Ok(ValidationInfo { arch, size })
     }
 }
 
@@ -48,17 +49,18 @@ impl Validation for ComponentInfo<ServiceInfo> {
                 arch = infer_arch(self.path.join(executable))?;
             }
         }
-        return Ok(ValidationInfo { arch, size });
+        Ok(ValidationInfo { arch, size })
     }
 }
 
-impl ToString for PackageArch {
-    fn to_string(&self) -> String {
-        match self {
+impl Display for PackageArch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
             PackageArch::ARM => String::from("arm"),
             PackageArch::ALL => String::from("all"),
             PackageArch::X86(s) => s.clone(),
-        }
+        };
+        write!(f, "{}", str)
     }
 }
 
@@ -75,17 +77,15 @@ impl FromStr for PackageArch {
     }
 }
 
-
-
 fn infer_arch<P: AsRef<Path>>(path: P) -> Result<Option<PackageArch>> {
     let elf = ElfStream::<AnyEndian, _>::open_stream(File::open(path.as_ref())?)
         .map_err(|e| Error::new(ErrorKind::InvalidData, format!("Bad binary: {e:?}")))?;
-    return match elf.ehdr.e_machine {
+    match elf.ehdr.e_machine {
         elf::abi::EM_ARM => Ok(Some(PackageArch::ARM)),
         elf::abi::EM_386 => Ok(Some(PackageArch::X86(String::from("x86")))),
         e => Err(Error::new(
             ErrorKind::InvalidData,
             format!("Unsupported binary machine type {}", e_machine_to_string(e)),
         )),
-    };
+    }
 }

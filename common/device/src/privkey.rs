@@ -6,7 +6,7 @@ use crate::PrivateKey;
 
 impl PrivateKey {
     pub fn content(&self) -> Result<String, Error> {
-        return match self {
+        match self {
             PrivateKey::Name { name } => {
                 let mut secret_file = File::open(ssh_dir()?.join(name))?;
                 let mut secret = String::new();
@@ -19,6 +19,6 @@ impl PrivateKey {
                 secret_file.read_to_string(&mut secret)?;
                 Ok(secret)
             }
-        };
+        }
     }
 }

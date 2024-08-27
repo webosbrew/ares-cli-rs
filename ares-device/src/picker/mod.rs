@@ -43,7 +43,7 @@ impl PickDevice for DeviceManager {
             }
             None => devices.iter().find(|d| d.default.unwrap_or(false)).cloned(),
         };
-        return Ok(device);
+        Ok(device)
     }
 }
 
@@ -51,10 +51,10 @@ impl FromStr for DeviceSelection {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        return if s.is_empty() {
+        if s.is_empty() {
             Ok(Self::Pick)
         } else {
             Ok(Self::Name(s.to_string()))
-        };
+        }
     }
 }

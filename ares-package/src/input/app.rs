@@ -1,3 +1,5 @@
+#![allow(clippy::needless_return)]
+
 use std::io::{Error, ErrorKind, Read, Result};
 
 use serde::Deserialize;
@@ -16,11 +18,11 @@ pub struct AppInfo {
 
 impl ParseFrom for AppInfo {
     fn parse_from<R: Read>(reader: R) -> Result<AppInfo> {
-        return serde_json::from_reader(reader).map_err(|e| {
+        serde_json::from_reader(reader).map_err(|e| {
             Error::new(
                 ErrorKind::InvalidData,
                 format!("Invalid appinfo.json: {e:?}"),
             )
-        });
+        })
     }
 }
