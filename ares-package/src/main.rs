@@ -65,7 +65,7 @@ fn main() {
     let app_dir = cli.app_dir;
     let outdir = cli
         .outdir
-        .or_else(|| app_dir.parent().map(|p| p.to_path_buf()))
+        .or_else(|| std::env::current_dir().ok())
         .expect("Invalid output directory");
 
     let data = DataInfo::from_input(&app_dir, &cli.service_dir, &cli.app_exclude).unwrap();
