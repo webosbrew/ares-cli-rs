@@ -33,7 +33,7 @@ impl Luna for Session {
         if exit_code == 0 {
             return Ok(serde_json::from_str(&buf)?);
         }
-        return Err(LunaError::NotAvailable);
+        Err(LunaError::NotAvailable)
     }
 
     fn subscribe<P>(&self, uri: &str, payload: P, public: bool) -> Result<Subscription, LunaError>
@@ -49,36 +49,36 @@ impl Luna for Session {
             "{luna_cmd} -i {uri} {}",
             snailquote::escape(&payload_str)
         ))?;
-        return Ok(Subscription {
+        Ok(Subscription {
             ch,
             buffer: Vec::new(),
-        });
+        })
     }
 }
 
 impl From<SshError> for LunaError {
     fn from(value: SshError) -> Self {
-        return Self::Session(value.into());
+        Self::Session(value.into())
     }
 }
 
 impl From<SessionError> for LunaError {
     fn from(value: SessionError) -> Self {
-        return Self::Session(value);
+        Self::Session(value)
     }
 }
 
 impl From<JsonError> for LunaError {
     fn from(value: JsonError) -> Self {
-        return Self::Io(IoError::new(
+        Self::Io(IoError::new(
             ErrorKind::InvalidData,
             format!("Invalid JSON: {value:?}"),
-        ));
+        ))
     }
 }
 
 impl From<IoError> for LunaError {
     fn from(value: IoError) -> Self {
-        return Self::Io(value);
+        Self::Io(value)
     }
 }

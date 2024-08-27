@@ -11,4 +11,4 @@ common-connection = { path = "../common/connection" }
 clap = { workspace = true, features = ["derive", "env"] }
 libssh-rs = { workspace = true }
 crossbeam-channel = "0.5.8"
-crossterm = "0.27.0"
+crossterm = "0.28.1"

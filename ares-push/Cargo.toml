@@ -12,7 +12,7 @@ common-device = { path = "../common/device" }
 common-connection = { path = "../common/connection" }
 clap = { workspace = true, features = ["derive", "env"] }
 path-slash = "0.2.1"
-walkdir = "2.4.0"
+walkdir = "2.5.0"
 
 [package.metadata.deb]
 section = "devel"
