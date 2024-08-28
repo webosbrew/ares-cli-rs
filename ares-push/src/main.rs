@@ -36,12 +36,10 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
     let manager = DeviceManager::default();
-    let device = manager.find_or_default(cli.device).unwrap();
-    if device.is_none() {
+    let Some(device) = manager.find_or_default(cli.device).unwrap() else {
         eprintln!("Device not found");
         exit(1);
-    }
-    let device = device.unwrap();
+    };
     let session = device.new_session().unwrap();
     let sftp = session.sftp().unwrap();
     for source in cli.source {
@@ -75,7 +73,7 @@ fn main() {
                         );
                         let mut file = match sftp.open(
                             dest_path.to_slash_lossy().as_ref(),
-                            OpenFlags::READ_ONLY | OpenFlags::CREATE | OpenFlags::TRUNCATE,
+                            OpenFlags::WRITE_ONLY | OpenFlags::CREATE | OpenFlags::TRUNCATE,
                             0o644,
                         ) {
                             Ok(file) => file,

@@ -88,7 +88,7 @@ impl FileTransfer for DeviceSession {
         if let Ok(sftp) = self.maybe_sftp() {
             let mut file = sftp.open(
                 target.as_ref().to_slash_lossy().as_ref(),
-                OpenFlags::READ_ONLY | OpenFlags::CREATE | OpenFlags::TRUNCATE,
+                OpenFlags::WRITE_ONLY | OpenFlags::CREATE | OpenFlags::TRUNCATE,
                 0o644,
             )?;
             copy_with_progress(source, &mut file, progress)?;
