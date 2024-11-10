@@ -1,6 +1,6 @@
 [package]
 name = "ares-shell"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Mariotaku Lee <mariotaku.lee@gmail.com>"]
 license = "Apache-2.0"
@@ -10,5 +10,5 @@ common-device = { path = "../common/device" }
 common-connection = { path = "../common/connection" }
 clap = { workspace = true, features = ["derive", "env"] }
 libssh-rs = { workspace = true }
-crossbeam-channel = "0.5.8"
+crossbeam-channel = "0.5.13"
 crossterm = "0.28.1"

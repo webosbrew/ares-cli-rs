@@ -23,12 +23,14 @@ struct Cli {
     device: Option<String>,
     #[arg(
         value_name = "SOURCE",
-        help = "Path in the host machine, where files exist."
+        help = "Path in the host machine, where files exist.",
+        required = true
     )]
     source: Vec<PathBuf>,
     #[arg(
         value_name = "DESTINATION",
-        help = "Path in the DEVICE, where multiple files can be copied"
+        help = "Path in the DEVICE, where multiple files can be copied",
+        required = true
     )]
     destination: String,
 }

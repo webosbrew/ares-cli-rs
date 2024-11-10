@@ -39,9 +39,8 @@ impl PickPrompt for PickPromptWindows {
 
         nwg::dispatch_thread_events();
 
-        devices
-            .get(ui.index.lock().unwrap().clone() as usize)
-            .map(|d| d.as_ref().clone())
+        let index = ui.index.lock().unwrap().clone() as usize;
+        devices.get(index).map(|d| d.as_ref()).cloned()
     }
 }
 

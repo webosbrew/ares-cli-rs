@@ -1,4 +1,3 @@
-use std::fmt::Write;
 use std::fs::File;
 use std::io::{Error as IoError, ErrorKind};
 use std::path::Path;
