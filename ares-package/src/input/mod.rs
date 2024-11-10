@@ -10,9 +10,20 @@ pub mod data;
 pub mod service;
 pub mod validation;
 
-pub(crate) fn filter_by_excludes(entry: &DirEntry, excludes: Option<&Regex>) -> bool {
+pub(crate) fn filter_by_excludes<P: AsRef<Path>>(
+    base: P,
+    entry: &DirEntry,
+    excludes: Option<&Regex>,
+) -> bool {
     if let Some(exclude) = excludes {
-        return !exclude.is_match(entry.path().to_slash_lossy().as_ref());
+        return !exclude.is_match(
+            entry
+                .path()
+                .strip_prefix(base)
+                .unwrap()
+                .to_slash_lossy()
+                .as_ref(),
+        );
     }
     true
 }
@@ -22,7 +33,7 @@ pub(crate) fn dir_size<P: AsRef<Path>>(path: P, excludes: Option<&Regex>) -> Res
     let mut size = 0;
     for entry in walker
         .into_iter()
-        .filter_entry(|entry| filter_by_excludes(entry, excludes))
+        .filter_entry(|entry| filter_by_excludes(&path, entry, excludes))
     {
         let entry = entry?;
         size += entry.metadata()?.len();

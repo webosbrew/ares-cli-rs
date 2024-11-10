@@ -53,7 +53,7 @@ impl DataInfo {
         }
         let mut excludes: Option<Regex> = None;
         if !exclude_queries.is_empty() {
-            excludes = Regex::new(&format!("(?i){}", exclude_queries.join("|"))).ok();
+            excludes = Some(Regex::new(&format!("(?i){}", exclude_queries.join("|"))).unwrap());
         }
         for service_dir in service_dirs {
             let service_dir = service_dir.as_ref();

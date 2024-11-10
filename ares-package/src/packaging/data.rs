@@ -135,7 +135,7 @@ where
         .sort_by_file_name();
     for entry in walker
         .into_iter()
-        .filter_entry(|entry| filter_by_excludes(entry, excludes))
+        .filter_entry(|entry| filter_by_excludes(base_path, entry, excludes))
     {
         let entry = entry?;
         let entry_type = entry.file_type();
