@@ -6,6 +6,9 @@ edition.workspace = true
 [lib]
 name = "ares_device_lib"
 
+[lints]
+workspace = true
+
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

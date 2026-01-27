@@ -6,6 +6,9 @@ edition.workspace = true
 [lib]
 name = "ares_connection_lib"
 
+[lints]
+workspace = true
+
 [dependencies]
 common-device = { path = "../device" }
 serde = { workspace = true, features = ["derive"] }

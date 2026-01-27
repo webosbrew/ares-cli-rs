@@ -8,6 +8,9 @@ description = "Install or Remove app from a device"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[lints]
+workspace = true
+
 [dependencies]
 common-device = { path = "../common/device" }
 common-connection = { path = "../common/connection" }

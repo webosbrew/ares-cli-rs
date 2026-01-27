@@ -6,6 +6,9 @@ authors.workspace = true
 license.workspace = true
 description = "Tools for getting device information"
 
+[lints]
+workspace = true
+
 [dependencies]
 common-device = { path = "../common/device" }
 common-connection = { path = "../common/connection" }
