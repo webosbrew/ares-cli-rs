@@ -11,6 +11,11 @@ members = [
     "ares-shell",
 ]
 
+[workspace.package]
+edition = "2021"
+license = "Apache-2.0"
+authors = ["Mariotaku Lee <mariotaku.lee@gmail.com>"]
+
 [workspace.dependencies]
 clap = { version = "4.4.6", features = ["derive", "env"] }
 serde = { version = "1.0.214", features = ["derive"] }

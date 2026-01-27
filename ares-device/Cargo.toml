@@ -1,9 +1,9 @@
 [package]
 name = "ares-device"
 version = "0.1.2"
-edition = "2021"
-authors = ["Mariotaku Lee <mariotaku.lee@gmail.com>"]
-license = "Apache-2.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
 description = "Tools for getting device information"
 
 [dependencies]
@@ -15,7 +15,10 @@ cfg-if = "1.0.0"
 [target.'cfg(target_os="windows")'.dependencies]
 native-windows-gui = { version = "1.0.13" }
 native-windows-derive = "1.0.5"
-libssh-rs-sys = { workspace = true, features = ["vendored-openssl", "libz-sys"] }
+libssh-rs-sys = { workspace = true, features = [
+  "vendored-openssl",
+  "libz-sys",
+] }
 
 [target.'cfg(not(target_os="windows"))'.dependencies]
 libssh-rs-sys = { workspace = true, default-features = false }

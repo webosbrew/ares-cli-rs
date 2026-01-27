@@ -1,9 +1,9 @@
 [package]
 name = "ares-push"
 version = "0.1.4"
-edition = "2021"
-authors = ["Mariotaku Lee <mariotaku.lee@gmail.com>"]
-license = "Apache-2.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
