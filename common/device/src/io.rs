@@ -1,9 +1,7 @@
-#[cfg(target_family = "windows")]
-use std::env;
-use std::fs;
 use std::fs::{File, create_dir_all};
 use std::io::{BufReader, BufWriter, Error, ErrorKind};
 use std::path::PathBuf;
+use std::{env, fs};
 
 use serde_json::Value;
 
@@ -16,7 +14,7 @@ pub(crate) fn read() -> Result<Vec<Device>, Error> {
         Err(e) => {
             return match e.kind() {
                 ErrorKind::NotFound => Ok(Vec::new()),
-                _ => Err(e.into()),
+                _ => Err(e),
             };
         }
     };
@@ -29,7 +27,7 @@ pub(crate) fn read() -> Result<Vec<Device>, Error> {
         .collect())
 }
 
-pub(crate) fn write(devices: Vec<Device>) -> Result<(), Error> {
+pub(crate) fn write(devices: &[Device]) -> Result<(), Error> {
     let path = devices_file_path()?;
     let file = match File::create(path.as_path()) {
         Ok(file) => file,
@@ -42,12 +40,12 @@ pub(crate) fn write(devices: Vec<Device>) -> Result<(), Error> {
                     let parent = path.parent().ok_or(Error::from(ErrorKind::NotFound))?;
                     create_dir_all(parent)?;
                 }
-                _ => return Err(e.into()),
+                _ => return Err(e),
             }
             File::create(path.as_path())?
         }
     };
-    log::info!("make the file writable: {:?}", path);
+    log::info!("make the file writable: {}", path.display());
     file.metadata()?.permissions().set_readonly(false);
     let writer = BufWriter::new(file);
     serde_json::to_writer_pretty(writer, &devices)?;
@@ -82,6 +80,10 @@ fn devices_file_path() -> Result<PathBuf, Error> {
 #[cfg(not(unix))]
 fn fix_devices_json_perm(path: PathBuf) -> Result<(), Error> {
     let mut perm = fs::metadata(path.clone())?.permissions();
+    #[allow(
+        clippy::permissions_set_readonly_false,
+        reason = "cfg(not(unix)) above"
+    )]
     perm.set_readonly(false);
     fs::set_permissions(path, perm)?;
     Ok(())

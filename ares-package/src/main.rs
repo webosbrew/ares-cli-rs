@@ -74,23 +74,17 @@ fn main() {
     let arch = cli
         .force_arch
         .or_else(|| validation.arch.clone())
-        .unwrap_or_else(|| PackageArch::ALL);
-    if let Some(validation_arch) = &validation.arch {
-        if std::mem::discriminant(&arch) != std::mem::discriminant(validation_arch) {
-            eprintln!(
-                "Incompatible architecture: {} != {}",
-                arch.to_string(),
-                validation_arch.to_string()
-            );
-            return;
-        }
+        .unwrap_or(PackageArch::ALL);
+    if let Some(validation_arch) = &validation.arch
+        && std::mem::discriminant(&arch) != std::mem::discriminant(validation_arch)
+    {
+        eprintln!("Incompatible architecture: {arch} != {validation_arch}");
+        return;
     }
 
     let path = outdir.join(format!(
         "{}_{}_{}.ipk",
-        package_info.id,
-        package_info.version,
-        arch.to_string()
+        package_info.id, package_info.version, arch
     ));
     println!("Packaging {}...", path.to_string_lossy());
     let ipk_file = File::create(path).unwrap();

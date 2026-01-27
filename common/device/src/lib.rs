@@ -1,5 +1,3 @@
-use std::sync::Mutex;
-
 use serde::{Deserialize, Serialize};
 
 mod device;
@@ -8,9 +6,7 @@ mod manager;
 mod privkey;
 
 #[derive(Default)]
-pub struct DeviceManager {
-    devices: Mutex<Vec<Device>>,
-}
+pub struct DeviceManager {}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Device {
@@ -25,6 +21,7 @@ pub struct Device {
     pub host: String,
     pub port: u16,
     pub username: String,
+    #[allow(dead_code)]
     #[serde(default, skip_serializing)]
     pub(crate) new: bool,
     #[serde(rename = "privateKey", skip_serializing_if = "Option::is_none")]
@@ -67,6 +64,7 @@ pub enum FileTransfer {
     Sftp,
 }
 
+#[must_use]
 pub fn add(left: usize, right: usize) -> usize {
     left + right
 }

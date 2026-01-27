@@ -10,13 +10,16 @@ impl DeviceManager {
         read()
     }
 
-    pub fn find_or_default<S: AsRef<str>>(&self, name: Option<S>) -> Result<Option<Device>, Error> {
+    pub fn find_or_default<S: AsRef<str>>(
+        &self,
+        name: Option<&S>,
+    ) -> Result<Option<Device>, Error> {
         let devices = self.list()?;
         Ok(devices
             .iter()
             .find(|d| {
                 if let Some(name) = &name {
-                    &d.name == name.as_ref()
+                    d.name == name.as_ref()
                 } else {
                     d.default.unwrap_or(false)
                 }
@@ -35,31 +38,28 @@ impl DeviceManager {
                 device.default = None;
             }
         }
-        log::trace!("{:?}", devices);
-        write(devices)?;
+        log::trace!("{devices:?}");
+        write(&devices)?;
         Ok(result)
     }
 
     pub fn add(&self, device: &Device) -> Result<Device, Error> {
         let mut device = device.clone();
-        match &device.private_key {
-            Some(PrivateKey::Path { path }) => {
-                let path = Path::new(path);
-                if path.is_absolute() {
-                    let name = String::from(
-                        pathdiff::diff_paths(path, ensure_ssh_dir()?)
-                            .ok_or(Error::from(ErrorKind::NotFound))?
-                            .to_string_lossy(),
-                    );
-                    device.private_key = Some(PrivateKey::Name { name });
-                }
+        if let Some(PrivateKey::Path { path }) = &device.private_key {
+            let path = Path::new(path);
+            if path.is_absolute() {
+                let name = String::from(
+                    pathdiff::diff_paths(path, ensure_ssh_dir()?)
+                        .ok_or(Error::from(ErrorKind::NotFound))?
+                        .to_string_lossy(),
+                );
+                device.private_key = Some(PrivateKey::Name { name });
             }
-            _ => {}
         }
         log::info!("Save device {}", device.name);
         let mut devices = read()?;
         devices.push(device.clone());
-        write(devices.clone())?;
+        write(&devices)?;
         Ok(device)
     }
 
@@ -75,7 +75,7 @@ impl DeviceManager {
                 }
                 if let Some(name) = device.private_key.and_then(|k| match k {
                     PrivateKey::Name { name } => Some(name),
-                    _ => None,
+                    PrivateKey::Path { .. } => None,
                 }) {
                     if !name.starts_with("webos_") {
                         continue;
@@ -88,7 +88,7 @@ impl DeviceManager {
         if need_new_default && !will_keep.is_empty() {
             will_keep.first_mut().unwrap().default = Some(true);
         }
-        write(will_keep)?;
+        write(&will_keep)?;
         Ok(())
     }
 }
