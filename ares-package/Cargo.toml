@@ -12,10 +12,10 @@ clap = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 ar = "0.9.0"
-tar = "0.4.43"
-flate2 = "1.0.34"
+tar = "0.4.44"
+flate2 = "1.1.8"
 path-slash = "0.2.1"
-elf = "0.7.4"
+elf = "0.8.0"
 regex = { workspace = true }
 walkdir = "2.5.0"
 

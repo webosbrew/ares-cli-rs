@@ -10,7 +10,7 @@ description = "Tools for getting device information"
 common-device = { path = "../common/device" }
 common-connection = { path = "../common/connection" }
 clap = { workspace = true }
-cfg-if = "1.0.0"
+cfg-if = "1.0.4"
 
 [target.'cfg(target_os="windows")'.dependencies]
 native-windows-gui = { version = "1.0.13" }
@@ -24,10 +24,10 @@ libssh-rs-sys = { workspace = true, features = [
 libssh-rs-sys = { workspace = true, default-features = false }
 
 [target.'cfg(all(not(target_os="windows"), not(target_os="macos")))'.dependencies]
-gtk = "0.18.1"
+gtk = "0.18.2"
 
 [build-dependencies]
-embed-manifest = "1.4.0"
+embed-manifest = "1.5.0"
 
 [package.metadata.deb]
 section = "devel"
