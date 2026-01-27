@@ -2,13 +2,12 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
-use clap::Parser;
-use path_slash::PathBufExt;
-use walkdir::WalkDir;
-
 use ares_connection_lib::session::NewSession;
 use ares_device_lib::DeviceManager;
+use clap::Parser;
 use libssh_rs::OpenFlags;
+use path_slash::PathBufExt;
+use walkdir::WalkDir;
 
 #[derive(Parser, Debug)]
 #[command(about)]

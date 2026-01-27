@@ -4,9 +4,9 @@ use std::io::{Error, ErrorKind, Result};
 use std::path::Path;
 use std::str::FromStr;
 
+use elf::ElfStream;
 use elf::endian::AnyEndian;
 use elf::to_str::e_machine_to_string;
-use elf::ElfStream;
 
 use crate::input::app::AppInfo;
 use crate::input::data::ComponentInfo;

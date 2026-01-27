@@ -3,8 +3,8 @@ use std::io::{Cursor, Write as IoWrite};
 use std::ops::Deref;
 
 use ar::{Builder as ArBuilder, Header as ArHeader};
-use flate2::write::GzEncoder;
 use flate2::Compression;
+use flate2::write::GzEncoder;
 use tar::{Builder as TarBuilder, Header as TarHeader};
 
 pub struct ControlInfo {

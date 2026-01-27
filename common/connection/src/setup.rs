@@ -1,8 +1,7 @@
 use std::io::{Error, ErrorKind};
 
-use libssh_rs::SshKey;
-
 use ares_device_lib::DeviceManager;
+use libssh_rs::SshKey;
 
 use crate::DeviceSetupManager;
 

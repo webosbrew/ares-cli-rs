@@ -6,16 +6,16 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use ar::{Builder as ArBuilder, Header as ArHeader};
-use flate2::write::GzEncoder;
 use flate2::Compression;
+use flate2::write::GzEncoder;
 use path_slash::PathExt as _;
 use regex::Regex;
 use tar::{Builder as TarBuilder, EntryType, Header as TarHeader};
 use walkdir::WalkDir;
 
+use crate::PackageInfo;
 use crate::input::data::DataInfo;
 use crate::input::filter_by_excludes;
-use crate::PackageInfo;
 
 pub trait AppendData {
     fn append_data(&mut self, details: &DataInfo, mtime: u64) -> Result<()>;

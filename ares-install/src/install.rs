@@ -3,14 +3,13 @@ use std::io::{Error as IoError, ErrorKind};
 use std::path::Path;
 use std::time::Duration;
 
+use ares_connection_lib::luna::{Luna, LunaError, Message};
+use ares_connection_lib::session::DeviceSession;
+use ares_connection_lib::transfer::{FileTransfer, TransferError};
 use indicatif::{ProgressBar, ProgressStyle};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Error as JsonError;
-
-use ares_connection_lib::luna::{Luna, LunaError, Message};
-use ares_connection_lib::session::DeviceSession;
-use ares_connection_lib::transfer::{FileTransfer, TransferError};
 
 pub(crate) trait InstallApp {
     fn install_app<P: AsRef<Path>>(&self, package: P) -> Result<(), InstallError>;

@@ -3,9 +3,8 @@ use std::io::Error as IoError;
 use std::ops::Deref;
 use std::time::Duration;
 
-use libssh_rs::{AuthStatus, Error as SshError, Session, SshKey, SshOption};
-
 use ares_device_lib::Device;
+use libssh_rs::{AuthStatus, Error as SshError, Session, SshKey, SshOption};
 
 pub trait NewSession {
     fn new_session(&self) -> Result<DeviceSession, SessionError>;

@@ -1,10 +1,9 @@
+use ares_connection_lib::luna::Luna;
+use ares_connection_lib::session::DeviceSession;
 use regex::Regex;
 use serde::Serialize;
 
-use ares_connection_lib::luna::Luna;
-use ares_connection_lib::session::DeviceSession;
-
-use crate::install::{map_installer_message, InstallError};
+use crate::install::{InstallError, map_installer_message};
 
 pub(crate) trait RemoveApp {
     fn remove_app(&self, package_id: &str) -> Result<String, InstallError>;

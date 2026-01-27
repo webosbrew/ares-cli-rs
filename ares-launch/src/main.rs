@@ -1,11 +1,10 @@
 use std::process::exit;
 
-use clap::Parser;
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
-
 use ares_connection_lib::session::NewSession;
 use ares_device_lib::DeviceManager;
+use clap::Parser;
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value, json};
 
 use crate::close::CloseApp;
 use crate::launch::LaunchApp;

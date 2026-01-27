@@ -88,7 +88,9 @@ fn main() {
 
     let path = outdir.join(format!(
         "{}_{}_{}.ipk",
-        package_info.id, package_info.version, arch.to_string()
+        package_info.id,
+        package_info.version,
+        arch.to_string()
     ));
     println!("Packaging {}...", path.to_string_lossy());
     let ipk_file = File::create(path).unwrap();

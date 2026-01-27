@@ -1,12 +1,11 @@
 use std::io::stdout;
 use std::process::exit;
 
+use ares_connection_lib::session::NewSession;
+use ares_device_lib::DeviceManager;
 use clap::Parser;
 use crossterm::terminal;
 use crossterm::tty::IsTty;
-
-use ares_connection_lib::session::NewSession;
-use ares_device_lib::DeviceManager;
 
 mod dumb;
 mod pty;

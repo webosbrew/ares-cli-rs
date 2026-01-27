@@ -1,9 +1,8 @@
-use std::io::Read;
-use std::io::{Error as IoError, ErrorKind};
+use std::io::{Error as IoError, ErrorKind, Read};
 
 use libssh_rs::{Error as SshError, Session};
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use serde_json::Error as JsonError;
 
 use crate::luna::{Luna, LunaError, Subscription};
