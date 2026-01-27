@@ -1,8 +1,8 @@
 use std::fs::File;
 use std::io::{Error, Read};
 
-use crate::io::ssh_dir;
 use crate::PrivateKey;
+use crate::io::ssh_dir;
 
 impl PrivateKey {
     pub fn content(&self) -> Result<String, Error> {

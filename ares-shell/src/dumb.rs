@@ -1,10 +1,10 @@
-use std::io::{stdin, Error, Read, Write};
+use std::io::{Error, Read, Write, stdin};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use crossbeam_channel::{select, unbounded, Sender};
+use crossbeam_channel::{Sender, select, unbounded};
 use libssh_rs::Channel;
 use libssh_rs::Error::TryAgain;
 
@@ -69,23 +69,25 @@ impl EventThread {
         let thread_terminated = Arc::downgrade(&terminated);
         Self {
             terminated,
-            handle: Mutex::new(Some(thread::spawn(move || loop {
-                if let Some(terminated) = thread_terminated.upgrade() {
-                    if *terminated.lock().unwrap() {
-                        break;
-                    }
-                } else {
-                    break;
-                }
-                let mut buf = [0; 1024];
-                match stdin().read(&mut buf) {
-                    Ok(size) => {
-                        if !tx.send(buf[..size].to_vec()).is_ok() {
+            handle: Mutex::new(Some(thread::spawn(move || {
+                loop {
+                    if let Some(terminated) = thread_terminated.upgrade() {
+                        if *terminated.lock().unwrap() {
                             break;
                         }
-                    }
-                    Err(_) => {
+                    } else {
                         break;
+                    }
+                    let mut buf = [0; 1024];
+                    match stdin().read(&mut buf) {
+                        Ok(size) => {
+                            if !tx.send(buf[..size].to_vec()).is_ok() {
+                                break;
+                            }
+                        }
+                        Err(_) => {
+                            break;
+                        }
                     }
                 }
             }))),

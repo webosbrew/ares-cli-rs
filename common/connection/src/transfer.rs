@@ -1,11 +1,9 @@
 use std::io::{Error as IoError, Read, Write};
 use std::path::Path;
 
-use libssh_rs::{Error as SshError, FileType};
-use libssh_rs::{OpenFlags, Sftp};
-use path_slash::PathExt;
-
 use ares_device_lib::FileTransfer::Stream;
+use libssh_rs::{Error as SshError, FileType, OpenFlags, Sftp};
+use path_slash::PathExt;
 
 use crate::session::DeviceSession;
 
@@ -19,7 +17,7 @@ pub trait FileTransfer {
         progress: F,
     ) -> Result<(), TransferError>;
     fn get<P: AsRef<Path>, W: Write>(&self, source: P, target: &mut W)
-        -> Result<(), TransferError>;
+    -> Result<(), TransferError>;
 
     fn rm<P: AsRef<Path>>(&self, path: P) -> Result<(), TransferError>;
 }

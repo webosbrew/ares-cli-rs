@@ -4,10 +4,9 @@ extern crate native_windows_gui as nwg;
 use std::fmt::{Display, Formatter};
 use std::sync::Mutex;
 
+use ares_device_lib::Device;
 use nwd::NwgUi;
 use nwg::NativeUi;
-
-use ares_device_lib::Device;
 
 use crate::picker::PickPrompt;
 

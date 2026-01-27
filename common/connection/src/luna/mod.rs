@@ -1,8 +1,8 @@
 use std::io::Error as IoError;
 
 use libssh_rs::Channel;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::session::SessionError;

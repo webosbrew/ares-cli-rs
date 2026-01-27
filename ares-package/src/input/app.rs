@@ -2,11 +2,11 @@
 
 use std::io::{Error, ErrorKind, Read, Result};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::ParseFrom;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct AppInfo {
     pub id: String,
     pub version: String,

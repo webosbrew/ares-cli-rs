@@ -7,6 +7,7 @@ impl AsRef<Device> for Device {
 }
 
 impl Device {
+    #[must_use]
     pub fn valid_passphrase(&self) -> Option<String> {
         self.passphrase.clone().filter(|s| !s.is_empty())
     }

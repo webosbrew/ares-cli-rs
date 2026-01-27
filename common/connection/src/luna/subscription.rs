@@ -1,7 +1,9 @@
-use crate::luna::{Message, Subscription};
-use serde_json::Value;
 use std::io::{Error, ErrorKind};
 use std::time::Duration;
+
+use serde_json::Value;
+
+use crate::luna::{Message, Subscription};
 
 impl Iterator for Subscription {
     type Item = std::io::Result<Message>;

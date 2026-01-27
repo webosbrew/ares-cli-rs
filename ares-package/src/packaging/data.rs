@@ -2,20 +2,19 @@ use std::collections::HashSet;
 use std::fs;
 use std::fs::File;
 use std::io::{Cursor, Result, Write as IoWrite, Write};
-use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use ar::{Builder as ArBuilder, Header as ArHeader};
-use flate2::write::GzEncoder;
 use flate2::Compression;
+use flate2::write::GzEncoder;
 use path_slash::PathExt as _;
 use regex::Regex;
 use tar::{Builder as TarBuilder, EntryType, Header as TarHeader};
 use walkdir::WalkDir;
 
+use crate::PackageInfo;
 use crate::input::data::DataInfo;
 use crate::input::filter_by_excludes;
-use crate::PackageInfo;
 
 pub trait AppendData {
     fn append_data(&mut self, details: &DataInfo, mtime: u64) -> Result<()>;
@@ -56,7 +55,7 @@ where
         drop(tar);
 
         let mut ar_header = ArHeader::new(b"data.tar.gz".to_vec(), data_tar_gz.len() as u64);
-        ar_header.set_mode(0o100644);
+        ar_header.set_mode(0o100_644);
         ar_header.set_mtime(mtime);
         self.append(&ar_header, Cursor::new(data_tar_gz))
     }
@@ -92,14 +91,14 @@ where
             dir.push('/');
         }
         header.set_entry_type(EntryType::Directory);
-        header.set_mode(0o100775);
+        header.set_mode(0o100_775);
         header.set_size(0);
         header.set_uid(0);
         header.set_gid(5000);
         header.set_mtime(mtime);
         header.set_cksum();
-        println!("Adding {path}", path = dir);
-        tar.append_data(&mut header, &dir, empty.deref())?;
+        println!("Adding {dir}");
+        tar.append_data(&mut header, &dir, &*empty)?;
     }
     Ok(())
 }
@@ -187,13 +186,13 @@ where
     append_dirs(tar, &package_dir, dir_entries, mtime)?;
     let mut header = TarHeader::new_gnu();
     let pkg_info_path = format!("usr/palm/packages/{}/packageinfo.json", info.id);
-    header.set_mode(0o100644);
+    header.set_mode(0o100_644);
     header.set_size(details.package_data.len() as u64);
     header.set_mtime(mtime);
     header.set_uid(0);
     header.set_gid(5000);
     header.set_cksum();
-    tar.append_data(&mut header, &pkg_info_path, details.package_data.deref())?;
-    println!("Adding {path}", path = pkg_info_path);
+    tar.append_data(&mut header, &pkg_info_path, &*details.package_data)?;
+    println!("Adding {pkg_info_path}");
     Ok(())
 }

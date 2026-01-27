@@ -1,13 +1,13 @@
 use std::path::PathBuf;
 use std::process::exit;
 
-use clap::Parser;
-
-use crate::remove::RemoveApp;
 use ares_connection_lib::session::NewSession;
 use ares_device_lib::DeviceManager;
+use clap::Parser;
 use install::InstallApp;
 use list::ListApps;
+
+use crate::remove::RemoveApp;
 
 mod install;
 mod list;

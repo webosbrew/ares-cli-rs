@@ -1,10 +1,10 @@
 use std::io::{Error, ErrorKind, Read, Result};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::ParseFrom;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ServiceInfo {
     pub id: String,
     pub description: Option<String>,

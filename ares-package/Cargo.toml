@@ -1,21 +1,24 @@
 [package]
 name = "ares-package"
 version = "0.1.4"
-edition = "2021"
-authors = ["Mariotaku Lee <mariotaku.lee@gmail.com>"]
-license = "Apache-2.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lints]
+workspace = true
 
 [dependencies]
 clap = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 ar = "0.9.0"
-tar = "0.4.43"
-flate2 = "1.0.34"
+tar = "0.4.44"
+flate2 = "1.1.8"
 path-slash = "0.2.1"
-elf = "0.7.4"
+elf = "0.8.0"
 regex = { workspace = true }
 walkdir = "2.5.0"
 

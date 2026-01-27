@@ -4,9 +4,9 @@ use std::io::{Error, ErrorKind, Result};
 use std::path::Path;
 use std::str::FromStr;
 
+use elf::ElfStream;
 use elf::endian::AnyEndian;
 use elf::to_str::e_machine_to_string;
-use elf::ElfStream;
 
 use crate::input::app::AppInfo;
 use crate::input::data::ComponentInfo;
@@ -44,11 +44,10 @@ impl Validation for ComponentInfo<ServiceInfo> {
     fn validate(&self) -> Result<ValidationInfo> {
         let size = dir_size(&self.path, self.excludes.as_ref())?;
         let mut arch: Option<PackageArch> = None;
-        if let (Some(engine), Some(executable)) = (&self.info.engine, &self.info.executable) {
-            if engine == "native" {
+        if let (Some(engine), Some(executable)) = (&self.info.engine, &self.info.executable)
+            && engine == "native" {
                 arch = infer_arch(self.path.join(executable))?;
             }
-        }
         Ok(ValidationInfo { arch, size })
     }
 }
@@ -60,7 +59,7 @@ impl Display for PackageArch {
             PackageArch::ALL => String::from("all"),
             PackageArch::X86(s) => s.clone(),
         };
-        write!(f, "{}", str)
+        write!(f, "{str}")
     }
 }
 

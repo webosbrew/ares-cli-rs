@@ -1,5 +1,5 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = [
     "common/device",
     "common/connection",
@@ -10,6 +10,15 @@ members = [
     "ares-device",
     "ares-shell",
 ]
+
+[workspace.package]
+edition = "2024"
+license = "Apache-2.0"
+authors = ["Mariotaku Lee <mariotaku.lee@gmail.com>"]
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+upper_case_acronyms = "allow"
 
 [workspace.dependencies]
 clap = { version = "4.4.6", features = ["derive", "env"] }

@@ -43,10 +43,10 @@ impl DataInfo {
         let mut exclude_queries = Vec::<String>::new();
         for pattern in excludes {
             let mut pattern = String::from(pattern.as_ref());
-            if pattern.starts_with(".") {
-                pattern = pattern.replacen(".", "^\\.", 1);
-            } else if pattern.starts_with("*") {
-                pattern = pattern.replacen("*", "", 1);
+            if pattern.starts_with('.') {
+                pattern = pattern.replacen('.', "^\\.", 1);
+            } else if pattern.starts_with('*') {
+                pattern = pattern.replacen('*', "", 1);
             }
             pattern.push('$');
             exclude_queries.push(pattern);

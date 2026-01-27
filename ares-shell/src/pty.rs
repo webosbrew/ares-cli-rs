@@ -4,7 +4,7 @@ use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use crossbeam_channel::{select, unbounded, Sender};
+use crossbeam_channel::{Sender, select, unbounded};
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind};
 use crossterm::terminal;
 use libssh_rs::Error::TryAgain;
@@ -141,25 +141,27 @@ impl EventThread {
         let thread_terminated = Arc::downgrade(&terminated);
         Self {
             terminated,
-            handle: Mutex::new(Some(thread::spawn(move || loop {
-                if let Some(terminated) = thread_terminated.upgrade() {
-                    if *terminated.lock().unwrap() {
+            handle: Mutex::new(Some(thread::spawn(move || {
+                loop {
+                    if let Some(terminated) = thread_terminated.upgrade() {
+                        if *terminated.lock().unwrap() {
+                            break;
+                        }
+                    } else {
                         break;
                     }
-                } else {
-                    break;
-                }
-                let Ok(has_event) = crossterm::event::poll(Duration::from_millis(20)) else {
-                    break;
-                };
-                if !has_event {
-                    continue;
-                }
-                let Ok(event) = crossterm::event::read() else {
-                    break;
-                };
-                if !tx.send(event).is_ok() {
-                    break;
+                    let Ok(has_event) = crossterm::event::poll(Duration::from_millis(20)) else {
+                        break;
+                    };
+                    if !has_event {
+                        continue;
+                    }
+                    let Ok(event) = crossterm::event::read() else {
+                        break;
+                    };
+                    if !tx.send(event).is_ok() {
+                        break;
+                    }
                 }
             }))),
         }

@@ -1,10 +1,9 @@
 use std::process::exit;
 
+use ares_connection_lib::luna::Luna;
 use libssh_rs::Session;
 use serde::Deserialize;
 use serde_json::json;
-
-use ares_connection_lib::luna::Luna;
 
 pub(crate) trait ListRunning {
     fn list_running(&self);

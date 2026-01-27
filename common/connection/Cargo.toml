@@ -1,10 +1,13 @@
 [package]
 name = "common-connection"
 version = "0.1.1"
-edition = "2021"
+edition.workspace = true
 
 [lib]
 name = "ares_connection_lib"
+
+[lints]
+workspace = true
 
 [dependencies]
 common-device = { path = "../device" }
@@ -16,7 +19,10 @@ snailquote = "0.3.1"
 path-slash = "0.2.1"
 
 [target.'cfg(target_os="windows")'.dependencies]
-libssh-rs-sys = { workspace = true, features = ["vendored-openssl", "libz-sys"] }
+libssh-rs-sys = { workspace = true, features = [
+  "vendored-openssl",
+  "libz-sys",
+] }
 
 [target.'cfg(not(target_os="windows"))'.dependencies]
 libssh-rs-sys = { workspace = true, default-features = false }

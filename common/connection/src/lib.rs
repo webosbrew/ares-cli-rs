@@ -1,8 +1,8 @@
 use std::io::Error;
 
-mod setup;
-pub mod session;
 pub mod luna;
+pub mod session;
+mod setup;
 pub mod transfer;
 
 pub trait DeviceSetupManager {

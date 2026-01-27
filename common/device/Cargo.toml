@@ -1,17 +1,19 @@
 [package]
 name = "common-device"
 version = "0.1.1"
-edition = "2021"
+edition.workspace = true
 
 [lib]
 name = "ares_device_lib"
 
+[lints]
+workspace = true
+
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-home = "0.5.5"
-log = "0.4.20"
-pathdiff = "0.2.1"
+log = "0.4.29"
+pathdiff = "0.2.3"
 
 [features]
 picker = []

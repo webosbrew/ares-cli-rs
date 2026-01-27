@@ -1,10 +1,9 @@
 use std::fmt::{Display, Formatter};
 use std::io::{Cursor, Write as IoWrite};
-use std::ops::Deref;
 
 use ar::{Builder as ArBuilder, Header as ArHeader};
-use flate2::write::GzEncoder;
 use flate2::Compression;
+use flate2::write::GzEncoder;
 use tar::{Builder as TarBuilder, Header as TarHeader};
 
 pub struct ControlInfo {
@@ -30,15 +29,15 @@ where
         let mut tar = TarBuilder::new(gz);
 
         let mut tar_header = TarHeader::new_gnu();
-        tar_header.set_mode(0o100644);
+        tar_header.set_mode(0o100_644);
         tar_header.set_size(control.len() as u64);
         tar_header.set_mtime(mtime);
         tar_header.set_cksum();
-        tar.append_data(&mut tar_header, "control", control.deref())?;
+        tar.append_data(&mut tar_header, "control", &*control)?;
         drop(tar);
 
         let mut ar_header = ArHeader::new(b"control.tar.gz".to_vec(), control_tar_gz.len() as u64);
-        ar_header.set_mode(0o100644);
+        ar_header.set_mode(0o100_644);
         ar_header.set_mtime(mtime);
         self.append(&ar_header, Cursor::new(control_tar_gz))
     }

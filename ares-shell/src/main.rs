@@ -1,12 +1,11 @@
 use std::io::stdout;
 use std::process::exit;
 
+use ares_connection_lib::session::NewSession;
+use ares_device_lib::DeviceManager;
 use clap::Parser;
 use crossterm::terminal;
 use crossterm::tty::IsTty;
-
-use ares_connection_lib::session::NewSession;
-use ares_device_lib::DeviceManager;
 
 mod dumb;
 mod pty;
@@ -33,7 +32,7 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
     let manager = DeviceManager::default();
-    let Some(device) = manager.find_or_default(cli.device).unwrap() else {
+    let Some(device) = manager.find_or_default(cli.device.as_ref()).unwrap() else {
         eprintln!("Device not found");
         exit(255);
     };
