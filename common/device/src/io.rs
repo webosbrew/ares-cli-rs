@@ -5,7 +5,6 @@ use std::fs::{create_dir_all, File};
 use std::io::{BufReader, BufWriter, Error, ErrorKind};
 use std::path::PathBuf;
 
-use home::home_dir;
 use serde_json::Value;
 
 use crate::Device;
@@ -56,7 +55,7 @@ pub(crate) fn write(devices: Vec<Device>) -> Result<(), Error> {
 }
 
 pub(crate) fn ssh_dir() -> Result<PathBuf, Error> {
-    home_dir()
+    env::home_dir()
         .map(|d| d.join(".ssh"))
         .ok_or(Error::new(ErrorKind::NotFound, "SSH directory not found"))
 }
@@ -90,8 +89,8 @@ fn fix_devices_json_perm(path: PathBuf) -> Result<(), Error> {
 
 #[cfg(not(target_family = "windows"))]
 fn devices_file_path() -> Result<PathBuf, Error> {
-    let home =
-        home_dir().ok_or_else(|| Error::new(ErrorKind::NotFound, "Can't find home directory"))?;
+    let home = env::home_dir()
+        .ok_or_else(|| Error::new(ErrorKind::NotFound, "Can't find home directory"))?;
     return Ok(home.join(".webos").join("ose").join("novacom-devices.json"));
 }
 

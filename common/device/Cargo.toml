@@ -9,7 +9,6 @@ name = "ares_device_lib"
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-home = "0.5.5"
 log = "0.4.20"
 pathdiff = "0.2.1"
 
