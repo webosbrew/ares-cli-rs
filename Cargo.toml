@@ -1,5 +1,5 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = [
     "common/device",
     "common/connection",
@@ -12,7 +12,7 @@ members = [
 ]
 
 [workspace.package]
-edition = "2021"
+edition = "2024"
 license = "Apache-2.0"
 authors = ["Mariotaku Lee <mariotaku.lee@gmail.com>"]
 
