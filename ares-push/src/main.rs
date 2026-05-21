@@ -37,7 +37,7 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
     let manager = DeviceManager::default();
-    let Some(device) = manager.find_or_default(cli.device).unwrap() else {
+    let Some(device) = manager.find_or_default(cli.device.as_ref()).unwrap() else {
         eprintln!("Device not found");
         exit(1);
     };
