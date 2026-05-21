@@ -7,6 +7,8 @@ on:
 
 jobs:
   release-ubuntu:
+    permissions:
+      contents: write
     strategy:
       matrix:
         include:
