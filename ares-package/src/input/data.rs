@@ -88,8 +88,8 @@ impl DataInfo {
 }
 
 impl Validation for DataInfo {
-    fn validate(&self) -> Result<ValidationInfo> {
-        let app_validation = self.app.validate()?;
+    fn validate(&self, force_arch: bool) -> Result<ValidationInfo> {
+        let app_validation = self.app.validate(force_arch)?;
         let mut archs = HashSet::<PackageArch>::new();
         let mut size_sum = self.package_data.len() as u64;
         if let Some(arch) = &app_validation.arch {
@@ -98,14 +98,14 @@ impl Validation for DataInfo {
         size_sum += app_validation.size;
 
         for info in &self.services {
-            let service_validation = info.validate()?;
+            let service_validation = info.validate(force_arch)?;
             if let Some(arch) = &service_validation.arch {
                 archs.insert(arch.clone());
             }
             size_sum += service_validation.size;
         }
 
-        if archs.len() > 1 {
+        if archs.len() > 1 && !force_arch {
             return Err(Error::new(
                 ErrorKind::InvalidData,
                 "Mixed architecture is not allowed",

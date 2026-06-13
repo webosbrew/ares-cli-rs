@@ -70,9 +70,10 @@ fn main() {
 
     let data = DataInfo::from_input(&app_dir, &cli.service_dir, &cli.app_exclude).unwrap();
     let package_info = &data.package;
-    let validation = data.validate().unwrap();
-    let arch = cli
-        .force_arch
+    let validation = data.validate(cli.force_arch.is_some()).unwrap();
+    let forced = cli.force_arch.clone();
+    let arch = forced
+        .clone()
         .or_else(|| validation.arch.clone())
         .unwrap_or(PackageArch::ALL);
     if let Some(validation_arch) = &validation.arch
@@ -80,6 +81,9 @@ fn main() {
     {
         eprintln!("Incompatible architecture: {arch} != {validation_arch}");
         return;
+    }
+    if forced.is_some() {
+        eprintln!("Warning: architecture {} was explicitly forced via -A", arch);
     }
 
     let path = outdir.join(format!(

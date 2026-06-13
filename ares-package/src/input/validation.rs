@@ -26,27 +26,27 @@ pub struct ValidationInfo {
 }
 
 pub trait Validation {
-    fn validate(&self) -> Result<ValidationInfo>;
+    fn validate(&self, force_arch: bool) -> Result<ValidationInfo>;
 }
 
 impl Validation for ComponentInfo<AppInfo> {
-    fn validate(&self) -> Result<ValidationInfo> {
+    fn validate(&self, force_arch: bool) -> Result<ValidationInfo> {
         let size = dir_size(&self.path, self.excludes.as_ref())?;
         let mut arch: Option<PackageArch> = None;
         if self.info.r#type == "native" {
-            arch = infer_arch(self.path.join(&self.info.main))?;
+            arch = infer_arch(self.path.join(&self.info.main), force_arch)?;
         }
         Ok(ValidationInfo { arch, size })
     }
 }
 
 impl Validation for ComponentInfo<ServiceInfo> {
-    fn validate(&self) -> Result<ValidationInfo> {
+    fn validate(&self, force_arch: bool) -> Result<ValidationInfo> {
         let size = dir_size(&self.path, self.excludes.as_ref())?;
         let mut arch: Option<PackageArch> = None;
         if let (Some(engine), Some(executable)) = (&self.info.engine, &self.info.executable)
             && engine == "native" {
-                arch = infer_arch(self.path.join(executable))?;
+                arch = infer_arch(self.path.join(executable), force_arch)?;
             }
         Ok(ValidationInfo { arch, size })
     }
@@ -76,15 +76,21 @@ impl FromStr for PackageArch {
     }
 }
 
-fn infer_arch<P: AsRef<Path>>(path: P) -> Result<Option<PackageArch>> {
+fn infer_arch<P: AsRef<Path>>(path: P, allow_unknown: bool) -> Result<Option<PackageArch>> {
     let elf = ElfStream::<AnyEndian, _>::open_stream(File::open(path.as_ref())?)
         .map_err(|e| Error::new(ErrorKind::InvalidData, format!("Bad binary: {e:?}")))?;
     match elf.ehdr.e_machine {
         elf::abi::EM_ARM => Ok(Some(PackageArch::ARM)),
         elf::abi::EM_386 => Ok(Some(PackageArch::X86(String::from("x86")))),
-        e => Err(Error::new(
-            ErrorKind::InvalidData,
-            format!("Unsupported binary machine type {}", e_machine_to_string(e)),
-        )),
+        other => {
+            if allow_unknown {
+                Ok(None)
+            } else {
+                Err(Error::new(
+                    ErrorKind::InvalidData,
+                    format!("Unsupported binary machine type {}", e_machine_to_string(other)),
+                ))
+            }
+        }
     }
 }
