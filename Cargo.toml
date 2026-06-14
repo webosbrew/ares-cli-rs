@@ -9,6 +9,7 @@ members = [
     "ares-launch",
     "ares-device",
     "ares-shell",
+    "ares-setup-device",
 ]
 
 [workspace.package]
