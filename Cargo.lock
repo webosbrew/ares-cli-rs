@@ -152,6 +152,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ares-setup-device"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "common-device",
+ "serde_json",
+]
+
+[[package]]
 name = "ares-shell"
 version = "0.1.1"
 dependencies = [
