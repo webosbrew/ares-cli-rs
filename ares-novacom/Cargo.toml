@@ -1,0 +1,18 @@
+[package]
+name = "ares-novacom"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Low-level device transport helpers (SSH key retrieval)"
+
+[lints]
+workspace = true
+
+[dependencies]
+common-device = { path = "../common/device" }
+common-connection = { path = "../common/connection" }
+clap = { workspace = true, features = ["derive", "env"] }
+
+[package.metadata.deb]
+section = "devel"

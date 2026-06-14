@@ -1,6 +1,6 @@
 use std::fs::remove_file;
 use std::io::{Error, ErrorKind};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::io::{ensure_ssh_dir, read, write};
 use crate::{Device, DeviceManager, PrivateKey};
@@ -43,6 +43,11 @@ fn normalize_private_key(device: &mut Device) -> Result<(), Error> {
 impl DeviceManager {
     pub fn list(&self) -> Result<Vec<Device>, Error> {
         read()
+    }
+
+    /// Returns the directory where SSH keys are stored (creating it if needed).
+    pub fn ssh_key_dir(&self) -> Result<PathBuf, Error> {
+        ensure_ssh_dir()
     }
 
     pub fn find_or_default<S: AsRef<str>>(

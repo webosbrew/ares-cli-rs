@@ -124,6 +124,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ares-novacom"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "common-connection",
+ "common-device",
+]
+
+[[package]]
 name = "ares-package"
 version = "0.1.4"
 dependencies = [
