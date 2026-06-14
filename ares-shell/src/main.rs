@@ -8,6 +8,7 @@ use crossterm::terminal;
 use crossterm::tty::IsTty;
 
 mod dumb;
+mod io;
 mod pty;
 
 #[derive(Parser, Debug)]
@@ -43,7 +44,8 @@ fn main() {
     let mut has_pty = false;
     if !cli.no_pty && (cli.pty || stdout().is_tty()) {
         let (width, height) = terminal::size().unwrap_or((80, 24));
-        if let Err(e) = ch.request_pty("xterm", width as u32, height as u32) {
+        let term = std::env::var("TERM").unwrap_or_else(|_| String::from("xterm"));
+        if let Err(e) = ch.request_pty(&term, u32::from(width), u32::from(height)) {
             eprintln!("Can't request pty: {:?}", e);
             if cli.pty {
                 exit(255);
@@ -66,6 +68,7 @@ fn main() {
         Ok(code) => exit(code),
         Err(e) => {
             eprintln!("Error: {:?}", e);
+            exit(1);
         }
     }
 }
