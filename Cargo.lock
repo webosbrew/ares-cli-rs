@@ -149,6 +149,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ares-pull"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "common-connection",
+ "common-device",
+ "libssh-rs",
+]
+
+[[package]]
 name = "ares-push"
 version = "0.1.4"
 dependencies = [

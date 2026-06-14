@@ -1,0 +1,19 @@
+[package]
+name = "ares-pull"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Pull files from a webOS device"
+
+[lints]
+workspace = true
+
+[dependencies]
+common-device = { path = "../common/device" }
+common-connection = { path = "../common/connection" }
+clap = { workspace = true, features = ["derive", "env"] }
+libssh-rs = { workspace = true }
+
+[package.metadata.deb]
+section = "devel"
