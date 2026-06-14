@@ -1,179 +1,104 @@
 use std::io::Write;
-use std::sync::{Arc, Mutex};
 use std::thread;
-use std::thread::JoinHandle;
 use std::time::Duration;
 
-use crossbeam_channel::{Sender, select, unbounded};
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind};
+use crossbeam_channel::{select, tick};
 use crossterm::terminal;
+use libssh_rs::Channel;
 use libssh_rs::Error::TryAgain;
-use libssh_rs::{Channel, Error};
+
+use crate::io::{io_error, spawn_stdin_reader};
+
+/// How long the main loop waits for input before checking the remote for
+/// output and the local terminal for resizes. Small enough to feel instant,
+/// large enough to keep the process idle when nothing is happening.
+const POLL_INTERVAL: Duration = Duration::from_millis(10);
+
+/// Restores the terminal to cooked mode when dropped, even on early return.
+struct RawMode;
+
+impl RawMode {
+    fn enable() -> std::io::Result<Self> {
+        terminal::enable_raw_mode()?;
+        Ok(Self)
+    }
+}
+
+impl Drop for RawMode {
+    fn drop(&mut self) {
+        let _ = terminal::disable_raw_mode();
+    }
+}
 
 pub(crate) fn shell(ch: Channel) -> Result<i32, std::io::Error> {
-    terminal::enable_raw_mode()?;
-    let (tx, rx) = unbounded::<Event>();
-    let events = EventThread::new(tx);
-    let mut buf = [0; 1024];
+    let _raw = RawMode::enable()?;
+    let stdin_rx = spawn_stdin_reader();
+    let ticker = tick(POLL_INTERVAL);
+
+    let mut buf = [0u8; 8192];
+    let mut last_size = terminal::size().unwrap_or((80, 24));
+    let mut input_open = true;
+
     loop {
-        if ch.is_eof() {
+        // Forward everything the remote has sent us. In a PTY, stderr is
+        // folded into stdout, so reading the stdout stream is enough.
+        drain(&ch, &mut buf)?;
+
+        if ch.is_eof() || ch.is_closed() {
             break;
         }
-        select! {
-            recv(rx) -> ev => match ev {
-                Ok(Event::Key(key)) => {
-                    if key.kind == KeyEventKind::Release {
-                        continue;
-                    }
-                    send_key(&mut ch.stdin(), &key)?;
-                }
-                Ok(Event::Resize(width, height)) => {
-                    ch.change_pty_size(width as u32, height as u32)?;
-                }
-                Ok(_) => {
-                }
-                Err(_) => {
-                    break;
-                }
-            },
-            default => {
-                match ch.read_nonblocking(&mut buf, false) {
-                     Err(TryAgain) | Ok(0) => {
-                        if ch.is_closed() {
-                            break;
-                        }
-                        thread::sleep(Duration::from_millis(1))
-                    }
-                    Ok(size) => {
-                        let mut stdout = std::io::stdout();
-                        stdout.write_all(&buf[..size])?;
-                        stdout.flush()?;
-                    }
-                    Err(e) => {
-                        return Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()));
-                    }
-                }
+
+        // Mirror local terminal resizes to the remote PTY.
+        match terminal::size() {
+            Ok(size) if size != last_size => {
+                ch.change_pty_size(u32::from(size.0), u32::from(size.1))
+                    .map_err(io_error)?;
+                last_size = size;
             }
+            _ => {}
+        }
+
+        if input_open {
+            select! {
+                recv(stdin_rx) -> msg => match msg {
+                    Ok(bytes) => {
+                        let mut stdin = ch.stdin();
+                        stdin.write_all(&bytes)?;
+                        stdin.flush()?;
+                    }
+                    // Local stdin reached EOF: let the remote know we are done.
+                    Err(_) => {
+                        input_open = false;
+                        let _ = ch.send_eof();
+                    }
+                },
+                recv(ticker) -> _ => {}
+            }
+        } else {
+            // No more input to forward; just keep draining remote output.
+            thread::sleep(POLL_INTERVAL);
         }
     }
-    drop(events);
-    Ok(ch.get_exit_status().unwrap_or(-1) as i32)
+
+    Ok(ch.get_exit_status().unwrap_or(-1))
 }
 
-fn send_key<Stdin: Write>(stdin: &mut Stdin, key: &KeyEvent) -> Result<(), Error> {
-    match key.code {
-        KeyCode::Backspace => {
-            stdin.write_all(&[0x08, 0x20, 0x08])?;
-        }
-        KeyCode::Enter => {
-            stdin.write_all(&[0x0d])?;
-        }
-        KeyCode::Left => {
-            stdin.write_all(&[0x1b, 0x5b, 0x44])?;
-        }
-        KeyCode::Right => {
-            stdin.write_all(&[0x1b, 0x5b, 0x43])?;
-        }
-        KeyCode::Up => {
-            stdin.write_all(&[0x1b, 0x5b, 0x41])?;
-        }
-        KeyCode::Down => {
-            stdin.write_all(&[0x1b, 0x5b, 0x42])?;
-        }
-        KeyCode::Home => {
-            stdin.write_all(&[0x1b, 0x5b, 0x48])?;
-        }
-        KeyCode::End => {
-            stdin.write_all(&[0x1b, 0x5b, 0x46])?;
-        }
-        KeyCode::PageUp => {
-            stdin.write_all(&[0x1b, 0x5b, 0x35, 0x7e])?;
-        }
-        KeyCode::PageDown => {
-            stdin.write_all(&[0x1b, 0x5b, 0x36, 0x7e])?;
-        }
-        KeyCode::Tab => {
-            stdin.write_all(&[0x09])?;
-        }
-        KeyCode::BackTab => {
-            stdin.write_all(&[0x1b, 0x5b, 0x5a])?;
-        }
-        KeyCode::Delete => {
-            stdin.write_all(&[0x1b, 0x5b, 0x33, 0x7e])?;
-        }
-        KeyCode::Insert => {
-            stdin.write_all(&[0x1b, 0x5b, 0x32, 0x7e])?;
-        }
-        KeyCode::F(n) => {
-            stdin.write_all(&[0x1b, 0x5b, 0x4f, 0x30 + n])?;
-        }
-        KeyCode::Char(c) => {
-            if key
-                .modifiers
-                .contains(crossterm::event::KeyModifiers::CONTROL)
-            {
-                stdin.write_all(&[c as u8 - 0x61])?;
-            } else if key.modifiers.contains(crossterm::event::KeyModifiers::ALT) {
-                stdin.write_all(&[0x1b, c as u8])?;
-            } else {
-                stdin.write_all(&[c as u8])?;
+/// Writes all currently-available remote output to stdout without blocking.
+fn drain(ch: &Channel, buf: &mut [u8]) -> Result<(), std::io::Error> {
+    let mut stdout = std::io::stdout().lock();
+    let mut wrote = false;
+    loop {
+        match ch.read_nonblocking(buf, false) {
+            Ok(0) | Err(TryAgain) => break,
+            Ok(size) => {
+                stdout.write_all(&buf[..size])?;
+                wrote = true;
             }
+            Err(e) => return Err(io_error(e)),
         }
-        KeyCode::Null => {
-            stdin.write_all(&[0x0])?;
-        }
-        KeyCode::Esc => {
-            stdin.write_all(&[0x1b])?;
-        }
-        _ => {}
+    }
+    if wrote {
+        stdout.flush()?;
     }
     Ok(())
-}
-
-struct EventThread {
-    handle: Mutex<Option<JoinHandle<()>>>,
-    terminated: Arc<Mutex<bool>>,
-}
-
-impl EventThread {
-    fn new(tx: Sender<Event>) -> Self {
-        let terminated = Arc::new(Mutex::new(false));
-        let thread_terminated = Arc::downgrade(&terminated);
-        Self {
-            terminated,
-            handle: Mutex::new(Some(thread::spawn(move || {
-                loop {
-                    if let Some(terminated) = thread_terminated.upgrade() {
-                        if *terminated.lock().unwrap() {
-                            break;
-                        }
-                    } else {
-                        break;
-                    }
-                    let Ok(has_event) = crossterm::event::poll(Duration::from_millis(20)) else {
-                        break;
-                    };
-                    if !has_event {
-                        continue;
-                    }
-                    let Ok(event) = crossterm::event::read() else {
-                        break;
-                    };
-                    if !tx.send(event).is_ok() {
-                        break;
-                    }
-                }
-            }))),
-        }
-    }
-}
-
-impl Drop for EventThread {
-    fn drop(&mut self) {
-        terminal::disable_raw_mode().unwrap();
-        *self.terminated.lock().unwrap() = true;
-        if let Some(hnd) = self.handle.lock().unwrap().take() {
-            hnd.join().unwrap();
-        }
-    }
 }
