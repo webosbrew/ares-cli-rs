@@ -27,6 +27,20 @@ struct Cli {
     #[arg(short, long, group = "action", help = "List the installed apps")]
     list: bool,
     #[arg(
+        short = 'F',
+        long = "listfull",
+        group = "action",
+        help = "List the installed apps with detailed information"
+    )]
+    list_full: bool,
+    #[arg(
+        short = 't',
+        long = "type",
+        value_name = "APP_TYPE",
+        help = "Filter the listed apps by APP_TYPE"
+    )]
+    app_type: Option<String>,
+    #[arg(
         short,
         long,
         group = "action",
@@ -52,8 +66,8 @@ fn main() {
     }
     let device = device.unwrap();
     let session = device.new_session().unwrap();
-    if cli.list {
-        session.list_apps();
+    if cli.list || cli.list_full {
+        session.list_apps(cli.list_full, cli.app_type.as_deref());
     } else if let Some(id) = cli.remove {
         println!("Removing {id}...");
         match session.remove_app(&id) {
