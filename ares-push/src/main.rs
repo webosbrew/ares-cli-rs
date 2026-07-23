@@ -5,7 +5,7 @@ use std::process::exit;
 use ares_connection_lib::session::NewSession;
 use ares_device_lib::DeviceManager;
 use clap::Parser;
-use libssh_rs::OpenFlags;
+use libssh_rs::{Error as SshError, OpenFlags};
 use path_slash::PathBufExt;
 use walkdir::WalkDir;
 
@@ -34,6 +34,27 @@ struct Cli {
     destination: String,
 }
 
+/// Recover the numeric SFTP status code from a libssh error. `SftpError`'s code
+/// field is private, so parse it out of the Display text ("Sftp error code N").
+/// Returns `None` for non-SFTP errors.
+fn sftp_status(e: &SshError) -> Option<u32> {
+    if !matches!(e, SshError::Sftp(_)) {
+        return None;
+    }
+    e.to_string().rsplit(' ').next()?.parse().ok()
+}
+
+/// Human-readable reason for an SFTP status code (subset of SSH_FX_* codes).
+fn sftp_reason(code: u32) -> &'static str {
+    match code {
+        2 => "no such file or directory",
+        3 => "permission denied",
+        4 => "failure",
+        8 => "operation not supported",
+        _ => "SFTP error",
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
     let manager = DeviceManager::default();
@@ -41,8 +62,21 @@ fn main() {
         eprintln!("Device not found");
         exit(1);
     };
-    let session = device.new_session().unwrap();
-    let sftp = session.sftp().unwrap();
+    let session = match device.new_session() {
+        Ok(session) => session,
+        Err(e) => {
+            eprintln!("Failed to connect to {}: {e:?}", device.name);
+            exit(1);
+        }
+    };
+    let sftp = match session.sftp() {
+        Ok(sftp) => sftp,
+        Err(e) => {
+            eprintln!("Failed to start SFTP session on {}: {e}", device.name);
+            exit(1);
+        }
+    };
+    let mut failed = false;
     for source in cli.source {
         let walker = WalkDir::new(&source).contents_first(false);
         let dest_base = Path::new(&cli.destination);
@@ -58,39 +92,65 @@ fn main() {
                     let file_type = entry.file_type();
                     let dest_path =
                         dest_base.join(entry.path().strip_prefix(source_prefix).unwrap());
+                    let dest_display = dest_path.to_slash_lossy();
                     if file_type.is_dir() {
-                        println!(
-                            "{} => {}",
-                            entry.path().to_string_lossy(),
-                            dest_path.to_slash_lossy()
-                        );
-                        sftp.create_dir(dest_path.to_slash_lossy().as_ref(), 0o755)
-                            .unwrap_or(());
+                        println!("{} => {}", entry.path().to_string_lossy(), dest_display);
+                        // A directory that already exists reports an error we can
+                        // safely ignore; a genuine failure surfaces when we try to
+                        // write a file into it below.
+                        sftp.create_dir(dest_display.as_ref(), 0o755).unwrap_or(());
                     } else if file_type.is_file() {
-                        println!(
-                            "{} => {}",
-                            entry.path().to_string_lossy(),
-                            dest_path.to_slash_lossy()
-                        );
+                        println!("{} => {}", entry.path().to_string_lossy(), dest_display);
                         let mut file = match sftp.open(
-                            dest_path.to_slash_lossy().as_ref(),
+                            dest_display.as_ref(),
                             OpenFlags::WRITE_ONLY | OpenFlags::CREATE | OpenFlags::TRUNCATE,
                             0o644,
                         ) {
                             Ok(file) => file,
                             Err(e) => {
-                                eprintln!("Failed to open file: {e:?}");
+                                match sftp_status(&e) {
+                                    Some(code) => {
+                                        eprintln!(
+                                            "Failed to write {dest_display}: {} (SFTP code {code})",
+                                            sftp_reason(code)
+                                        );
+                                        if code == 3 {
+                                            eprintln!(
+                                                "  The destination may not be writable on this \
+                                                 device; try a different path."
+                                            );
+                                        }
+                                    }
+                                    None => eprintln!("Failed to write {dest_display}: {e}"),
+                                }
+                                failed = true;
                                 continue;
                             }
                         };
-                        let mut loc_file = File::open(entry.path()).unwrap();
-                        std::io::copy(&mut loc_file, &mut file).unwrap();
+                        let mut loc_file = match File::open(entry.path()) {
+                            Ok(loc_file) => loc_file,
+                            Err(e) => {
+                                eprintln!("Failed to read {}: {e}", entry.path().to_string_lossy());
+                                failed = true;
+                                continue;
+                            }
+                        };
+                        if let Err(e) = std::io::copy(&mut loc_file, &mut file) {
+                            eprintln!("Failed to write {dest_display}: {e}");
+                            failed = true;
+                        }
                     } else if file_type.is_symlink() {
                         eprintln!("Skipping symlink {}", entry.path().to_string_lossy());
                     }
                 }
-                Err(e) => eprintln!("Failed to push file: {e:?}"),
+                Err(e) => {
+                    eprintln!("Failed to push file: {e:?}");
+                    failed = true;
+                }
             }
         }
+    }
+    if failed {
+        exit(1);
     }
 }
