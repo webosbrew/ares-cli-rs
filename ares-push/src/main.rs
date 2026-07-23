@@ -21,6 +21,12 @@ struct Cli {
     )]
     device: Option<String>,
     #[arg(
+        short,
+        long,
+        help = "Continue on errors instead of stopping at the first failure"
+    )]
+    ignore: bool,
+    #[arg(
         value_name = "SOURCE",
         help = "Path in the host machine, where files exist.",
         required = true
@@ -76,7 +82,6 @@ fn main() {
             exit(1);
         }
     };
-    let mut failed = false;
     for source in cli.source {
         let walker = WalkDir::new(&source).contents_first(false);
         let dest_base = Path::new(&cli.destination);
@@ -123,7 +128,9 @@ fn main() {
                                     }
                                     None => eprintln!("Failed to write {dest_display}: {e}"),
                                 }
-                                failed = true;
+                                if !cli.ignore {
+                                    exit(1);
+                                }
                                 continue;
                             }
                         };
@@ -131,13 +138,17 @@ fn main() {
                             Ok(loc_file) => loc_file,
                             Err(e) => {
                                 eprintln!("Failed to read {}: {e}", entry.path().to_string_lossy());
-                                failed = true;
+                                if !cli.ignore {
+                                    exit(1);
+                                }
                                 continue;
                             }
                         };
                         if let Err(e) = std::io::copy(&mut loc_file, &mut file) {
                             eprintln!("Failed to write {dest_display}: {e}");
-                            failed = true;
+                            if !cli.ignore {
+                                exit(1);
+                            }
                         }
                     } else if file_type.is_symlink() {
                         eprintln!("Skipping symlink {}", entry.path().to_string_lossy());
@@ -145,12 +156,11 @@ fn main() {
                 }
                 Err(e) => {
                     eprintln!("Failed to push file: {e:?}");
-                    failed = true;
+                    if !cli.ignore {
+                        exit(1);
+                    }
                 }
             }
         }
-    }
-    if failed {
-        exit(1);
     }
 }
