@@ -102,8 +102,8 @@ fn forward(manager: &DeviceManager, device: Option<&str>, port_spec: Option<&str
         "bind the host port",
     );
     println!(
-        "Forwarding 127.0.0.1:{host_port} -> {}:{device_port} on {}. Press Ctrl+C to stop.",
-        device_port, device.name
+        "Forwarding 127.0.0.1:{host_port} -> localhost:{device_port} on {}. Press Ctrl+C to stop.",
+        device.name
     );
 
     for stream in listener.incoming() {
