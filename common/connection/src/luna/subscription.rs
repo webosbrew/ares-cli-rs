@@ -1,7 +1,7 @@
 use std::io::{Error, ErrorKind};
 use std::time::Duration;
 
-use serde_json::Value;
+use libssh_rs::Error as SshError;
 
 use crate::luna::{Message, Subscription};
 
@@ -9,11 +9,22 @@ impl Iterator for Subscription {
     type Item = std::io::Result<Message>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.ch.is_closed() || self.ch.is_eof() {
-            return None;
-        }
-        let item: serde_json::Result<Value>;
         loop {
+            // Emit any complete line already buffered before reading more, so a
+            // single read that returns multiple lines is drained one at a time.
+            if let Some(idx) = self.buffer.iter().position(|&r| r == b'\n') {
+                let item = serde_json::from_slice(&self.buffer[..idx]);
+                self.buffer.drain(..idx + 1);
+                return Some(
+                    item.map_err(|e| {
+                        Error::new(ErrorKind::InvalidData, format!("Bad JSON response: {e:?}"))
+                    })
+                    .map(|value| Message { value }),
+                );
+            }
+            if self.ch.is_closed() || self.ch.is_eof() {
+                return None;
+            }
             let mut buffer = [0; 1024];
             match self
                 .ch
@@ -22,6 +33,11 @@ impl Iterator for Subscription {
                 Ok(len) => {
                     self.buffer.extend_from_slice(&buffer[..len]);
                 }
+                // The channel is in non-blocking mode, so a read that finds no
+                // data within the timeout window returns TryAgain (SSH_AGAIN).
+                // This is not fatal — the streaming install response simply
+                // hasn't produced the next line yet, so keep polling.
+                Err(SshError::TryAgain) => {}
                 Err(e) => {
                     return Some(Err(Error::new(
                         ErrorKind::Other,
@@ -29,21 +45,7 @@ impl Iterator for Subscription {
                     )));
                 }
             }
-            if self.buffer.is_empty() {
-                continue;
-            }
-            if let Some(idx) = self.buffer.iter().position(|&r| r == b'\n') {
-                item = serde_json::from_slice(&self.buffer[..idx]);
-                self.buffer.drain(..idx + 1);
-                break;
-            }
         }
-        Some(
-            item.map_err(|e| {
-                Error::new(ErrorKind::InvalidData, format!("Bad JSON response: {e:?}"))
-            })
-            .map(|value| Message { value }),
-        )
     }
 }
 
