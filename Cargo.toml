@@ -27,8 +27,8 @@ upper_case_acronyms = "allow"
 clap = { version = "4.4.6", features = ["derive", "env"] }
 serde = { version = "1.0.214", features = ["derive"] }
 serde_json = "1.0.132"
-libssh-rs = "0.3.3"
-libssh-rs-sys = { version = "0.2.4", default-features = false }
+libssh-rs = "0.3.8"
+libssh-rs-sys = { version = "0.2.8", default-features = false }
 sha256 = "1.5.0"
 regex = "1.11.1"
 indicatif = "0.17.8"
