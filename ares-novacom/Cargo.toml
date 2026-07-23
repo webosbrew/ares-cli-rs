@@ -13,6 +13,7 @@ workspace = true
 common-device = { path = "../common/device" }
 common-connection = { path = "../common/connection" }
 clap = { workspace = true, features = ["derive", "env"] }
+libssh-rs = { workspace = true }
 
 [package.metadata.deb]
 section = "devel"
