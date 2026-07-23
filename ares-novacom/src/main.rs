@@ -1,9 +1,16 @@
+use std::io::{Error as IoError, ErrorKind, Read, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::process::exit;
+use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 
 use ares_connection_lib::DeviceSetupManager;
+use ares_connection_lib::session::{DeviceSession, NewSession};
 use ares_device_lib::{DeviceManager, PrivateKey};
 use clap::Parser;
+use libssh_rs::Error as SshError;
 
 #[derive(Parser, Debug)]
 #[command(about)]
@@ -19,6 +26,7 @@ struct Cli {
     #[arg(
         short = 'k',
         long,
+        group = "action",
         help = "Fetch the SSH private key (webos_rsa) from the device"
     )]
     getkey: bool,
@@ -28,6 +36,21 @@ struct Cli {
         help = "Passphrase for the device's SSH key (the code shown in Developer Mode)"
     )]
     passphrase: Option<String>,
+    #[arg(
+        short = 'f',
+        long,
+        group = "action",
+        requires = "port",
+        help = "Forward a device port to the host machine (use with --port)"
+    )]
+    forward: bool,
+    #[arg(
+        short = 'p',
+        long,
+        value_name = "DEVICE_PORT[:HOST_PORT]",
+        help = "Port to forward: the device port, optionally mapped to a host port"
+    )]
+    port: Option<String>,
 }
 
 fn main() {
@@ -40,9 +63,131 @@ fn main() {
             cli.device.as_deref(),
             cli.passphrase.as_deref().unwrap_or(""),
         );
+    } else if cli.forward {
+        forward(&manager, cli.device.as_deref(), cli.port.as_deref());
     } else {
         Cli::parse_from(["", "--help"]);
     }
+}
+
+/// Local port-forward: accept TCP connections on a host port and tunnel each
+/// through the device's SSH session to `localhost:<device_port>` on the device.
+fn forward(manager: &DeviceManager, device: Option<&str>, port_spec: Option<&str>) {
+    let Some(port_spec) = port_spec else {
+        eprintln!("--port is required with --forward (DEVICE_PORT[:HOST_PORT])");
+        exit(1);
+    };
+    let (device_port, host_port) = match parse_port(port_spec) {
+        Ok(ports) => ports,
+        Err(e) => {
+            eprintln!("{e}");
+            exit(1);
+        }
+    };
+
+    let Some(device) = unwrap_or_exit(manager.find_or_default(device.as_ref()), "find device")
+    else {
+        eprintln!("Device not found");
+        exit(1);
+    };
+
+    let session = device.new_session().unwrap_or_else(|e| {
+        eprintln!("Failed to connect to {}: {e:?}", device.host);
+        exit(1);
+    });
+    let session = Arc::new(session);
+
+    let listener = unwrap_or_exit(
+        TcpListener::bind(("127.0.0.1", host_port)),
+        "bind the host port",
+    );
+    println!(
+        "Forwarding 127.0.0.1:{host_port} -> {}:{device_port} on {}. Press Ctrl+C to stop.",
+        device_port, device.name
+    );
+
+    for stream in listener.incoming() {
+        match stream {
+            Ok(tcp) => {
+                let session = Arc::clone(&session);
+                thread::spawn(move || {
+                    if let Err(e) = bridge(&session, tcp, device_port) {
+                        eprintln!("Forward connection closed: {e}");
+                    }
+                });
+            }
+            Err(e) => eprintln!("Failed to accept connection: {e}"),
+        }
+    }
+}
+
+/// Parses a `DEVICE_PORT[:HOST_PORT]` spec. The host port defaults to the
+/// device port when omitted.
+fn parse_port(spec: &str) -> Result<(u16, u16), String> {
+    let mut parts = spec.splitn(2, ':');
+    let device_raw = parts.next().unwrap_or("").trim();
+    let device_port: u16 = device_raw
+        .parse()
+        .map_err(|_| format!("Invalid device port: {device_raw:?}"))?;
+    let host_port = match parts.next() {
+        Some(host_raw) => host_raw
+            .trim()
+            .parse()
+            .map_err(|_| format!("Invalid host port: {:?}", host_raw.trim()))?,
+        None => device_port,
+    };
+    Ok((device_port, host_port))
+}
+
+/// Pumps bytes both ways between a local TCP connection and an SSH forwarding
+/// channel until either side closes. Uses short polling timeouts so a single
+/// SSH session can service several connections without one blocking the others.
+fn bridge(session: &DeviceSession, mut tcp: TcpStream, device_port: u16) -> Result<(), IoError> {
+    let channel = session.new_channel().map_err(to_io)?;
+    channel
+        .open_forward("localhost", device_port, "127.0.0.1", 0)
+        .map_err(to_io)?;
+    tcp.set_read_timeout(Some(Duration::from_millis(10)))?;
+
+    let mut buf = [0u8; 16 * 1024];
+    let mut socket_eof = false;
+    loop {
+        if !socket_eof {
+            match tcp.read(&mut buf) {
+                Ok(0) => {
+                    socket_eof = true;
+                    let _ = channel.send_eof();
+                }
+                Ok(n) => channel.stdin().write_all(&buf[..n])?,
+                Err(e) if would_block(&e) => {}
+                Err(e) => return Err(e),
+            }
+        }
+        match channel.read_timeout(&mut buf, false, Some(Duration::from_millis(50))) {
+            Ok(0) => {
+                if channel.is_eof() {
+                    break;
+                }
+            }
+            Ok(n) => tcp.write_all(&buf[..n])?,
+            // No device data yet within the poll window; keep going.
+            Err(SshError::TryAgain) => {}
+            Err(e) => return Err(to_io(e)),
+        }
+        if channel.is_closed() {
+            break;
+        }
+    }
+    let _ = channel.close();
+    Ok(())
+}
+
+fn would_block(e: &IoError) -> bool {
+    matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut)
+}
+
+fn to_io(e: SshError) -> IoError {
+    IoError::new(ErrorKind::Other, e.to_string())
 }
 
 fn get_key(manager: &DeviceManager, device: Option<&str>, passphrase: &str) {
