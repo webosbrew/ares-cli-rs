@@ -5,16 +5,114 @@ on:
   release:
     types: [ released ]
 
+env:
+  # Every binary that goes into a release archive.
+  BINS: >-
+    ares-device ares-install ares-launch ares-novacom ares-package
+    ares-pull ares-push ares-setup-device ares-shell
+
 jobs:
-  release-ubuntu:
+  # One archive per platform, with all tools inside.
+  archive:
     permissions:
       contents: write
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - runs-on: ubuntu-latest
+          # Built on 22.04 to keep the glibc requirement low.
+          - runs-on: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            name: linux-x86_64
+          - runs-on: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            name: linux-aarch64
+          - runs-on: macos-latest
+            target: aarch64-apple-darwin
+            name: macos-aarch64
+          - runs-on: macos-latest
+            target: x86_64-apple-darwin
+            name: macos-x86_64
+          - runs-on: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: windows-x86_64
+    runs-on: ${{ matrix.runs-on }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Build Dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get -yq update
+          sudo apt-get install -yq libgtk-3-dev
+
+      - name: Use Rust Stable
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ matrix.name }}
+
+      - name: Build
+        run: cargo build --release --locked --workspace --target ${{ matrix.target }}
+
+      - name: Make Archive
+        id: archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir="ares-cli-rs-${{ github.ref_name }}-${{ matrix.name }}"
+          mkdir -p "dist/$dir"
+          for bin in $BINS; do
+            src="target/${{ matrix.target }}/release/$bin"
+            if [ -f "$src.exe" ]; then
+              src="$src.exe"
+            fi
+            cp "$src" "dist/$dir/"
+          done
+          cp README.md LICENSE "dist/$dir/"
+          cd dist
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            file="$dir.zip"
+            7z a "$file" "$dir" > /dev/null
+          else
+            file="$dir.tar.gz"
+            tar czf "$file" "$dir"
+          fi
+          if command -v sha256sum > /dev/null; then
+            sha256sum "$file" > "$file.sha256"
+          else
+            shasum -a 256 "$file" > "$file.sha256"
+          fi
+          echo "path=dist/$file" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Archive
+        uses: ncipollo/release-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: Release ${{ github.ref_name }}
+          allowUpdates: true
+          omitNameDuringUpdate: true
+          omitBodyDuringUpdate: true
+          omitPrereleaseDuringUpdate: true
+          artifacts: ${{ steps.archive.outputs.path }},${{ steps.archive.outputs.path }}.sha256
+
+  # Debian packages, one per tool, for apt users.
+  debian:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runs-on: ubuntu-22.04
             arch: amd64
-          - runs-on: ubuntu-24.04-arm
+          - runs-on: ubuntu-22.04-arm
             arch: arm64
     runs-on: ${{ matrix.runs-on }}
 
@@ -23,19 +121,17 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Update Packages
-        shell: bash
-        run: sudo apt-get -yq update
-
       - name: Install Build Dependencies
-        run: sudo apt-get install -yq libgtk-3-dev
+        run: |
+          sudo apt-get -yq update
+          sudo apt-get install -yq libgtk-3-dev
 
       - name: Use Rust Stable
         run: rustup toolchain install stable --profile minimal
 
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ${{ runner.os }}-${{ matrix.arch }}
+          shared-key: deb-${{ matrix.arch }}
 
       - name: Install cargo-deb
         run: cargo install cargo-deb
@@ -46,8 +142,7 @@ jobs:
             cargo deb -p "$f" || exit 1
           done
 
-      - name: Create Release (Ubuntu ${{ matrix.arch }})
-        id: create_release_ubuntu
+      - name: Upload Packages (Ubuntu ${{ matrix.arch }})
         uses: ncipollo/release-action@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
