@@ -1,16 +1,21 @@
 [package]
 name = "ares-setup-device"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "Manage the list of webOS devices"
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Add, change or remove webOS devices"
 
 [lints]
 workspace = true
 
 [dependencies]
-common-device = { path = "../common/device" }
+ares-device-lib = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
 serde_json = { workspace = true }
 

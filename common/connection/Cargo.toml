@@ -1,7 +1,12 @@
 [package]
-name = "common-connection"
-version = "0.1.1"
+name = "ares-connection-lib"
+version.workspace = true
 edition.workspace = true
+authors.workspace = true
+license.workspace = true
+readme = "README.md"
+repository.workspace = true
+description = "Device connection and file transfer shared by the ares-cli-rs tools"
 
 [lib]
 name = "ares_connection_lib"
@@ -10,7 +15,7 @@ name = "ares_connection_lib"
 workspace = true
 
 [dependencies]
-common-device = { path = "../device" }
+ares-device-lib = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 libssh-rs = { workspace = true }
@@ -18,11 +23,11 @@ reqwest = { workspace = true, features = ["blocking"] }
 snailquote = "0.3.1"
 path-slash = "0.2.1"
 
-[target.'cfg(target_os="windows")'.dependencies]
-libssh-rs-sys = { workspace = true, features = [
-  "vendored-openssl",
-  "libz-sys",
-] }
+# Build libssh and OpenSSL from source on Windows and macOS. The binaries then
+# need no system libssh, and no Homebrew OpenSSL.
+[target.'cfg(any(target_os="windows", target_os="macos"))'.dependencies]
+libssh-rs-sys = { workspace = true, features = ["vendored", "vendored-openssl"] }
 
-[target.'cfg(not(target_os="windows"))'.dependencies]
+# On Linux, use the system libssh and OpenSSL when they are new enough.
+[target.'cfg(not(any(target_os="windows", target_os="macos")))'.dependencies]
 libssh-rs-sys = { workspace = true, default-features = false }
