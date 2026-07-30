@@ -1,11 +1,15 @@
 [package]
 name = "ares-package"
-version = "0.1.4"
+version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Pack a webOS app directory into an installable .ipk"
 
 [lints]
 workspace = true

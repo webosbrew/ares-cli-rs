@@ -1,17 +1,26 @@
 [package]
 name = "ares-shell"
-version = "0.1.1"
+version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Open an interactive shell on a webOS device"
 
 [lints]
 workspace = true
 
 [dependencies]
-common-device = { path = "../common/device" }
-common-connection = { path = "../common/connection" }
+ares-device-lib = { workspace = true }
+ares-connection-lib = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
 libssh-rs = { workspace = true }
 crossbeam-channel = "0.5.15"
 crossterm = "0.29.0"
+
+[package.metadata.deb]
+section = "devel"

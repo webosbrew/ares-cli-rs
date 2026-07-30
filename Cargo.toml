@@ -15,15 +15,27 @@ members = [
 ]
 
 [workspace.package]
+version = "0.2.0"
 edition = "2024"
 license = "Apache-2.0"
-authors = ["Mariotaku Lee <mariotaku.lee@gmail.com>"]
+authors = ["Mariotaku <git@mariotaku.me>"]
+repository = "https://github.com/webosbrew/ares-cli-rs"
+homepage = "https://github.com/webosbrew/ares-cli-rs"
+keywords = ["webos", "lg", "cli"]
+categories = ["command-line-utilities"]
+
+[profile.release]
+strip = true
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 upper_case_acronyms = "allow"
 
 [workspace.dependencies]
+# Internal libraries. Both path and version are needed: path for local builds,
+# version for `cargo publish`.
+ares-device-lib = { path = "common/device", version = "0.2.0" }
+ares-connection-lib = { path = "common/connection", version = "0.2.0" }
 clap = { version = "4.4.6", features = ["derive", "env"] }
 serde = { version = "1.0.214", features = ["derive"] }
 serde_json = "1.0.132"

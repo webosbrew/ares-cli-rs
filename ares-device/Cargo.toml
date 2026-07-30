@@ -1,31 +1,32 @@
 [package]
 name = "ares-device"
-version = "0.1.2"
+version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "Tools for getting device information"
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Show information about the webOS devices you set up"
 
 [lints]
 workspace = true
 
 [dependencies]
-common-device = { path = "../common/device" }
-common-connection = { path = "../common/connection" }
+ares-device-lib = { workspace = true }
+ares-connection-lib = { workspace = true }
 clap = { workspace = true }
 cfg-if = "1.0.4"
 
+# libssh build options live in common/connection, which every device-facing
+# tool depends on.
 [target.'cfg(target_os="windows")'.dependencies]
 native-windows-gui = { version = "1.0.13" }
 native-windows-derive = "1.0.5"
-libssh-rs-sys = { workspace = true, features = [
-  "vendored-openssl",
-  "libz-sys",
-] }
 
-[target.'cfg(not(target_os="windows"))'.dependencies]
-libssh-rs-sys = { workspace = true, default-features = false }
-
+# The device picker uses GTK everywhere except Windows and macOS.
 [target.'cfg(all(not(target_os="windows"), not(target_os="macos")))'.dependencies]
 gtk = "0.18.2"
 

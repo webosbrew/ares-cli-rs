@@ -1,7 +1,12 @@
 [package]
-name = "common-device"
-version = "0.1.1"
+name = "ares-device-lib"
+version.workspace = true
 edition.workspace = true
+authors.workspace = true
+license.workspace = true
+readme = "README.md"
+repository.workspace = true
+description = "Device list and SSH key handling shared by the ares-cli-rs tools"
 
 [lib]
 name = "ares_device_lib"
