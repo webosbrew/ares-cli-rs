@@ -203,7 +203,7 @@ fn get_key(manager: &DeviceManager, device: Option<&str>, passphrase: &str) {
         "fetch key",
     );
 
-    let key_name = key_file_name(&device.name);
+    let key_name = key_file_name(&content);
     let key_dir = unwrap_or_exit(manager.ssh_key_dir(), "resolve ssh directory");
     let key_path = key_dir.join(&key_name);
     unwrap_or_exit(write_key(&key_path, &content), "save key");
@@ -227,14 +227,17 @@ fn get_key(manager: &DeviceManager, device: Option<&str>, passphrase: &str) {
     );
 }
 
-/// Builds the local key filename for a device, matching the repo convention
-/// of a `webos_` prefix (so `ares-setup-device --remove` can clean it up).
-fn key_file_name(device_name: &str) -> String {
-    let sanitized: String = device_name
-        .chars()
-        .map(|c| if c.is_whitespace() { '_' } else { c })
-        .collect();
-    format!("webos_{sanitized}")
+/// Builds the local key filename from the key itself, as `webos_` plus the
+/// first 10 hex digits of its SHA-256. The `webos_` prefix follows the repo
+/// convention, so `ares-setup-device --remove` still cleans the file up.
+///
+/// The name follows the key, not the device, so fetching the same key again
+/// overwrites one file instead of leaving a copy per device name. Surrounding
+/// whitespace is cut before hashing, because the device sends a trailing
+/// newline only some of the time.
+fn key_file_name(key: &str) -> String {
+    let digest = sha256::digest(key.trim());
+    format!("webos_{}", &digest[..10])
 }
 
 fn write_key(path: &Path, content: &str) -> Result<(), std::io::Error> {
@@ -252,4 +255,38 @@ fn unwrap_or_exit<T>(result: Result<T, std::io::Error>, action: &str) -> T {
         eprintln!("Failed to {action}: {e}");
         exit(1);
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::key_file_name;
+
+    const KEY: &str = "-----BEGIN RSA PRIVATE KEY-----\nAAAA\n-----END RSA PRIVATE KEY-----";
+
+    #[test]
+    fn name_has_prefix_and_short_digest() {
+        let name = key_file_name(KEY);
+        assert!(name.starts_with("webos_"), "{name}");
+        assert_eq!(name.len(), "webos_".len() + 10);
+        assert!(name[6..].chars().all(|c| c.is_ascii_hexdigit()), "{name}");
+    }
+
+    #[test]
+    fn same_key_gives_same_name() {
+        assert_eq!(key_file_name(KEY), key_file_name(KEY));
+    }
+
+    #[test]
+    fn surrounding_whitespace_is_ignored() {
+        assert_eq!(key_file_name(KEY), key_file_name(&format!("{KEY}\n")));
+        assert_eq!(key_file_name(KEY), key_file_name(&format!("  {KEY}  ")));
+    }
+
+    #[test]
+    fn different_keys_give_different_names() {
+        assert_ne!(
+            key_file_name(KEY),
+            key_file_name("-----BEGIN RSA PRIVATE KEY-----\nBBBB\n-----END RSA PRIVATE KEY-----")
+        );
+    }
 }

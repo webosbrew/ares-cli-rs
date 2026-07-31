@@ -23,6 +23,12 @@ Options:
 `--getkey` writes the key to `~/.ssh` and points the device entry at it. Run it
 once per device, after you add the device and turn on Developer Mode.
 
+The file is named `webos_<digest>`, where the digest is the first 10 hex digits
+of the key's SHA-256. The name follows the key, so fetching the same key again
+overwrites one file instead of leaving a copy per device name. Turning
+Developer Mode off and on makes the device generate a new key, which lands in a
+new file.
+
 `--forward` keeps running until you stop it with Ctrl+C.
 
 ## Examples

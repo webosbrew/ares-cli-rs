@@ -154,6 +154,7 @@ dependencies = [
  "ares-device-lib",
  "clap",
  "libssh-rs",
+ "sha256",
 ]
 
 [[package]]
