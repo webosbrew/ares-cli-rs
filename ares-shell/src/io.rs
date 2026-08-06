@@ -2,6 +2,23 @@ use std::io::{Read, stdin};
 use std::thread;
 
 use crossbeam_channel::{Receiver, unbounded};
+use crossterm::terminal;
+
+/// Restores the terminal to cooked mode when dropped, even on early return.
+pub(crate) struct RawMode;
+
+impl RawMode {
+    pub(crate) fn enable() -> std::io::Result<Self> {
+        terminal::enable_raw_mode()?;
+        Ok(Self)
+    }
+}
+
+impl Drop for RawMode {
+    fn drop(&mut self) {
+        let _ = terminal::disable_raw_mode();
+    }
+}
 
 /// Reads raw bytes from stdin on a background thread and forwards them
 /// verbatim, exactly like `ssh`. Doing the read on its own thread lets the

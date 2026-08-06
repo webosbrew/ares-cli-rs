@@ -7,28 +7,12 @@ use crossterm::terminal;
 use libssh_rs::Channel;
 use libssh_rs::Error::TryAgain;
 
-use crate::io::{io_error, spawn_stdin_reader};
+use crate::io::{RawMode, io_error, spawn_stdin_reader};
 
 /// How long the main loop waits for input before checking the remote for
 /// output and the local terminal for resizes. Small enough to feel instant,
 /// large enough to keep the process idle when nothing is happening.
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
-
-/// Restores the terminal to cooked mode when dropped, even on early return.
-struct RawMode;
-
-impl RawMode {
-    fn enable() -> std::io::Result<Self> {
-        terminal::enable_raw_mode()?;
-        Ok(Self)
-    }
-}
-
-impl Drop for RawMode {
-    fn drop(&mut self) {
-        let _ = terminal::disable_raw_mode();
-    }
-}
 
 pub(crate) fn shell(ch: Channel) -> Result<i32, std::io::Error> {
     let _raw = RawMode::enable()?;
