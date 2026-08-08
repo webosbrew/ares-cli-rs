@@ -3,11 +3,49 @@ use std::io::Error as IoError;
 use std::ops::Deref;
 use std::time::Duration;
 
-use ares_device_lib::{Device, FileTransfer};
+use ares_device_lib::{Device, FileTransfer, PrivateKey};
 use libssh_rs::{AuthStatus, Error as SshError, Session, SshKey, SshOption};
 
 pub trait NewSession {
     fn new_session(&self) -> Result<DeviceSession, SessionError>;
+}
+
+/// Authenticate a connected session as `device`.
+///
+/// `key` is the private key itself, in OpenSSH format. The caller reads it,
+/// because where a [`crate::session::NewSession`] implementer looks for a key
+/// name is its own business. Pass `None` to fall back to the password, and to
+/// no authentication after that.
+///
+/// # Errors
+///
+/// Returns [`SessionError::Authorization`] if the device turns the attempt
+/// down, or the libssh error if the key does not parse.
+pub fn authenticate(
+    session: &Session,
+    device: &Device,
+    key: Option<&str>,
+) -> Result<(), SessionError> {
+    let (status, refused) = match (key, &device.password) {
+        (Some(key), _) => {
+            let key = SshKey::from_privkey_base64(key, device.valid_passphrase().as_deref())?;
+            (
+                session.userauth_publickey(None, &key)?,
+                "Key authorization failed",
+            )
+        }
+        (None, Some(password)) => (
+            session.userauth_password(None, Some(password))?,
+            "Bad SSH password",
+        ),
+        (None, None) => (session.userauth_none(None)?, "Host needs authorization"),
+    };
+    if status == AuthStatus::Success {
+        return Ok(());
+    }
+    Err(SessionError::Authorization {
+        message: refused.to_string(),
+    })
 }
 
 /// Set the timeout, the crypto algorithms and the host-key policy that a webOS
@@ -139,27 +177,12 @@ impl NewSession for Device {
 
         session.connect()?;
 
-        if let Some(private_key) = &self.private_key {
-            let passphrase = self.valid_passphrase();
-            let priv_key_content = private_key.content()?;
-            let priv_key = SshKey::from_privkey_base64(&priv_key_content, passphrase.as_deref())?;
-
-            if session.userauth_publickey(None, &priv_key)? != AuthStatus::Success {
-                return Err(SessionError::Authorization {
-                    message: "Key authorization failed".to_string(),
-                });
-            }
-        } else if let Some(password) = &self.password {
-            if session.userauth_password(None, Some(password))? != AuthStatus::Success {
-                return Err(SessionError::Authorization {
-                    message: "Bad SSH password".to_string(),
-                });
-            }
-        } else if session.userauth_none(None)? != AuthStatus::Success {
-            return Err(SessionError::Authorization {
-                message: "Host needs authorization".to_string(),
-            });
-        }
+        let key = self
+            .private_key
+            .as_ref()
+            .map(PrivateKey::content)
+            .transpose()?;
+        authenticate(&session, self, key.as_deref())?;
         Ok(DeviceSession {
             device: self.clone(),
             session,
