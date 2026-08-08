@@ -23,11 +23,21 @@ reqwest = { workspace = true, features = ["blocking"] }
 snailquote = "0.3.1"
 path-slash = "0.2.1"
 
-# Build libssh and OpenSSL from source on Windows and macOS. The binaries then
-# need no system libssh, and no Homebrew OpenSSL.
+[features]
+default = ["vendored"]
+
+# Build libssh and OpenSSL from source on Windows and macOS, so the binaries need
+# no system libssh and no Homebrew OpenSSL. On Linux this feature changes nothing:
+# the system libssh and OpenSSL are used either way.
+#
+# Turn it off with `default-features = false` to always link the system libssh.
+# Do that when you build against your own OpenSSL, or when another crate in the
+# graph already picks how OpenSSL is linked.
+vendored = ["dep:libssh-rs-sys"]
+
 [target.'cfg(any(target_os="windows", target_os="macos"))'.dependencies]
-libssh-rs-sys = { workspace = true, features = ["vendored", "vendored-openssl"] }
+libssh-rs-sys = { workspace = true, features = ["vendored", "vendored-openssl"], optional = true }
 
 # On Linux, use the system libssh and OpenSSL when they are new enough.
 [target.'cfg(not(any(target_os="windows", target_os="macos")))'.dependencies]
-libssh-rs-sys = { workspace = true, default-features = false }
+libssh-rs-sys = { workspace = true, optional = true }

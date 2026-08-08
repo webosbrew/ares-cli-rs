@@ -1,13 +1,46 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display, Formatter};
 use std::io::Error as IoError;
 use std::ops::Deref;
 use std::time::Duration;
 
-use ares_device_lib::Device;
+use ares_device_lib::{Device, FileTransfer};
 use libssh_rs::{AuthStatus, Error as SshError, Session, SshKey, SshOption};
 
 pub trait NewSession {
     fn new_session(&self) -> Result<DeviceSession, SessionError>;
+}
+
+/// A live SSH connection to a device.
+///
+/// [`DeviceSession`] is the one connection per run that the ares-cli-rs tools use.
+/// Implement this trait for your own type to reuse [`crate::transfer::FileTransfer`]
+/// with a connection that comes from somewhere else, such as a connection pool.
+///
+/// The trait asks only for what file transfer needs, so it does not tie you to
+/// this crate's [`Device`] type.
+pub trait SshConnection {
+    fn session(&self) -> &Session;
+
+    /// `false` when files have to stream over an exec channel instead of SFTP.
+    fn supports_sftp(&self) -> bool;
+
+    /// `true` when this user may chmod any path. A non-root user can't change the
+    /// mode of a directory somebody else owns, so `mkdir` leaves the mode alone.
+    fn is_root(&self) -> bool;
+}
+
+impl SshConnection for DeviceSession {
+    fn session(&self) -> &Session {
+        &self.session
+    }
+
+    fn supports_sftp(&self) -> bool {
+        self.device.files != Some(FileTransfer::Stream)
+    }
+
+    fn is_root(&self) -> bool {
+        self.device.username == "root"
+    }
 }
 
 pub struct DeviceSession {
@@ -21,6 +54,18 @@ pub enum SessionError {
     LibSsh(SshError),
     Authorization { message: String },
 }
+
+impl Display for SessionError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SessionError::Io(e) => write!(f, "{e}"),
+            SessionError::LibSsh(e) => write!(f, "{e}"),
+            SessionError::Authorization { message } => write!(f, "not authorized: {message}"),
+        }
+    }
+}
+
+impl std::error::Error for SessionError {}
 
 impl NewSession for Device {
     fn new_session(&self) -> Result<DeviceSession, SessionError> {

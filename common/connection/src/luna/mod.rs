@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use std::io::Error as IoError;
 
 use libssh_rs::Channel;
@@ -28,6 +29,18 @@ pub enum LunaError {
     Io(IoError),
     NotAvailable,
 }
+
+impl Display for LunaError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LunaError::Session(e) => write!(f, "{e}"),
+            LunaError::Io(e) => write!(f, "{e}"),
+            LunaError::NotAvailable => write!(f, "luna service is not available"),
+        }
+    }
+}
+
+impl std::error::Error for LunaError {}
 
 pub struct Subscription {
     ch: Channel,

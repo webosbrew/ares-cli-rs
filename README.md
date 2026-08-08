@@ -116,6 +116,27 @@ To build the whole workspace from a clone:
 cargo build --release --workspace
 ```
 
+### Using the libraries in another project
+
+`ares-connection-lib` builds libssh and OpenSSL from source on Windows and macOS,
+through its `vendored` feature. The feature is on by default. Turn it off when the
+host project already picks how OpenSSL is linked:
+
+```toml
+ares-connection-lib = { version = "0.3", default-features = false }
+```
+
+`Luna` is implemented for `libssh_rs::Session`, and `FileTransfer` for any type
+that implements `SshConnection`. Implement that trait to use both with your own
+connection type, such as one from a connection pool:
+
+```rust
+impl SshConnection for MyConnection {
+    fn device(&self) -> &Device { &self.device }
+    fn session(&self) -> &Session { &self.session }
+}
+```
+
 ## First steps
 
 Turn on Developer Mode on the TV first, and note the passphrase it shows.
