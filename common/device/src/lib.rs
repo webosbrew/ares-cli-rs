@@ -6,8 +6,16 @@ pub mod io;
 mod manager;
 mod privkey;
 
+/// Reads and writes the device list.
+///
+/// [`DeviceManager::default`] uses the directories the webOS SDK uses. Use
+/// [`DeviceManager::with_dirs`] to point it somewhere else, the way
+/// dev-manager-desktop keeps its list and its keys in its own app directory.
 #[derive(Default)]
-pub struct DeviceManager {}
+pub struct DeviceManager {
+    conf_dir: Option<std::path::PathBuf>,
+    ssh_dir: Option<std::path::PathBuf>,
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Device {

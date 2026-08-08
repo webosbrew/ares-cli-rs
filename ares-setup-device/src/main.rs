@@ -82,7 +82,7 @@ fn main() {
     } else if let Some(name) = &cli.modify {
         run_modify(&manager, name, &cli.info);
     } else if let Some(name) = &cli.remove {
-        unwrap_or_exit(manager.remove(name, true), "remove device");
+        unwrap_or_exit(manager.remove(name, true, false), "remove device");
         print_devices(&manager, false);
     } else if let Some(name) = &cli.default {
         unwrap_or_exit(manager.set_default(name), "set default device");

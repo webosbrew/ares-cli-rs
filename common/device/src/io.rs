@@ -72,14 +72,6 @@ pub fn write_in(conf_dir: &Path, devices: &[Device]) -> Result<(), Error> {
     Ok(())
 }
 
-pub(crate) fn read() -> Result<Vec<Device>, Error> {
-    read_in(&conf_dir()?)
-}
-
-pub(crate) fn write(devices: &[Device]) -> Result<(), Error> {
-    write_in(&conf_dir()?, devices)
-}
-
 pub(crate) fn ssh_dir() -> Result<PathBuf, Error> {
     env::home_dir()
         .map(|d| d.join(".ssh"))
