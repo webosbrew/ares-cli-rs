@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod cli;
 mod device;
-mod io;
+pub mod io;
 mod manager;
 mod privkey;
 

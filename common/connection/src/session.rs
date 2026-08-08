@@ -10,6 +10,68 @@ pub trait NewSession {
     fn new_session(&self) -> Result<DeviceSession, SessionError>;
 }
 
+/// Set the timeout, the crypto algorithms and the host-key policy that a webOS
+/// device needs.
+///
+/// A device runs an old SSH server, so the lists below keep algorithms that
+/// current defaults drop. Known hosts are off: a device has no stable host key.
+///
+/// Call this on a new [`Session`], before you set the host, port and user. Use
+/// it to build a session yourself, when [`NewSession::new_session`] does not fit
+/// because the session is pooled or the key comes from elsewhere.
+///
+/// # Errors
+///
+/// Returns the libssh error if an option is rejected.
+pub fn configure_session(session: &Session) -> Result<(), SshError> {
+    let kex = [
+        "curve25519-sha256",
+        "curve25519-sha256@libssh.org",
+        "ecdh-sha2-nistp256",
+        "ecdh-sha2-nistp384",
+        "ecdh-sha2-nistp521",
+        "diffie-hellman-group18-sha512",
+        "diffie-hellman-group16-sha512",
+        "diffie-hellman-group-exchange-sha256",
+        "diffie-hellman-group14-sha256",
+        "diffie-hellman-group1-sha1",
+        "diffie-hellman-group14-sha1",
+    ];
+    let hmac = [
+        "hmac-sha2-256-etm@openssh.com",
+        "hmac-sha2-512-etm@openssh.com",
+        "hmac-sha2-256",
+        "hmac-sha2-512",
+        "hmac-sha1-96",
+        "hmac-sha1",
+        "hmac-md5",
+    ];
+    let key_types = [
+        "ssh-ed25519",
+        "ecdsa-sha2-nistp521",
+        "ecdsa-sha2-nistp384",
+        "ecdsa-sha2-nistp256",
+        "rsa-sha2-512",
+        "rsa-sha2-256",
+        "ssh-rsa",
+    ];
+    session.set_option(SshOption::Timeout(Duration::from_secs(10)))?;
+    session.set_option(SshOption::KeyExchange(kex.join(",")))?;
+    session.set_option(SshOption::HmacCS(hmac.join(",")))?;
+    session.set_option(SshOption::HmacSC(hmac.join(",")))?;
+    session.set_option(SshOption::HostKeys(key_types.join(",")))?;
+    session.set_option(SshOption::PublicKeyAcceptedTypes(key_types.join(",")))?;
+    session.set_option(SshOption::ProcessConfig(false))?;
+
+    #[cfg(windows)]
+    let null_device = "C:\\nul";
+    #[cfg(not(windows))]
+    let null_device = "/dev/null";
+    session.set_option(SshOption::KnownHosts(Some(null_device.to_string())))?;
+    session.set_option(SshOption::GlobalKnownHosts(Some(null_device.to_string())))?;
+    Ok(())
+}
+
 /// A live SSH connection to a device.
 ///
 /// [`DeviceSession`] is the one connection per run that the ares-cli-rs tools use.
@@ -69,59 +131,11 @@ impl std::error::Error for SessionError {}
 
 impl NewSession for Device {
     fn new_session(&self) -> Result<DeviceSession, SessionError> {
-        let kex = vec![
-            "curve25519-sha256",
-            "curve25519-sha256@libssh.org",
-            "ecdh-sha2-nistp256",
-            "ecdh-sha2-nistp384",
-            "ecdh-sha2-nistp521",
-            "diffie-hellman-group18-sha512",
-            "diffie-hellman-group16-sha512",
-            "diffie-hellman-group-exchange-sha256",
-            "diffie-hellman-group14-sha256",
-            "diffie-hellman-group1-sha1",
-            "diffie-hellman-group14-sha1",
-        ];
-        let hmac = vec![
-            "hmac-sha2-256-etm@openssh.com",
-            "hmac-sha2-512-etm@openssh.com",
-            "hmac-sha2-256",
-            "hmac-sha2-512",
-            "hmac-sha1-96",
-            "hmac-sha1",
-            "hmac-md5",
-        ];
-        let key_types = vec![
-            "ssh-ed25519",
-            "ecdsa-sha2-nistp521",
-            "ecdsa-sha2-nistp384",
-            "ecdsa-sha2-nistp256",
-            "rsa-sha2-512",
-            "rsa-sha2-256",
-            "ssh-rsa",
-        ];
         let session = Session::new()?;
-        session.set_option(SshOption::Timeout(Duration::from_secs(10)))?;
+        configure_session(&session)?;
         session.set_option(SshOption::Hostname(self.host.clone()))?;
-        session.set_option(SshOption::Port(self.port.clone()))?;
+        session.set_option(SshOption::Port(self.port))?;
         session.set_option(SshOption::User(Some(self.username.clone())))?;
-        session.set_option(SshOption::KeyExchange(kex.join(",")))?;
-        session.set_option(SshOption::HmacCS(hmac.join(",")))?;
-        session.set_option(SshOption::HmacSC(hmac.join(",")))?;
-        session.set_option(SshOption::HostKeys(key_types.join(",")))?;
-        session.set_option(SshOption::PublicKeyAcceptedTypes(key_types.join(",")))?;
-        session.set_option(SshOption::ProcessConfig(false))?;
-        #[cfg(windows)]
-        {
-            session.set_option(SshOption::KnownHosts(Some("C:\\nul".to_string())))?;
-            session.set_option(SshOption::GlobalKnownHosts(Some("C:\\nul".to_string())))?;
-        }
-
-        #[cfg(not(windows))]
-        {
-            session.set_option(SshOption::KnownHosts(Some(format!("/dev/null"))))?;
-            session.set_option(SshOption::GlobalKnownHosts(Some(format!("/dev/null"))))?;
-        }
 
         session.connect()?;
 

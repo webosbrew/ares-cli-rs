@@ -2,7 +2,7 @@ use std::io::Error;
 
 pub mod luna;
 pub mod session;
-mod setup;
+pub mod setup;
 pub mod transfer;
 
 pub trait DeviceSetupManager {
