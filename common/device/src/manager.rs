@@ -142,9 +142,11 @@ impl DeviceManager {
                 if device.default.unwrap_or(false) {
                     need_new_default = true;
                 }
+                // Only a key this tool put in the SSH directory can be deleted.
+                // A path points somewhere else, and inline data is not a file.
                 if let Some(name) = device.private_key.and_then(|k| match k {
                     PrivateKey::Name { name } => Some(name),
-                    PrivateKey::Path { .. } => None,
+                    PrivateKey::Path { .. } | PrivateKey::Data { .. } => None,
                 }) {
                     if !name.starts_with("webos_") {
                         continue;
