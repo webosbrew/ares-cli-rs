@@ -16,8 +16,14 @@ pub trait FileTransfer {
         target: P,
         progress: F,
     ) -> Result<(), TransferError>;
-    fn get<P: AsRef<Path>, W: Write>(&self, source: P, target: &mut W)
-    -> Result<(), TransferError>;
+    /// `progress` is called with the running total of bytes read, the same way
+    /// [`FileTransfer::put`] reports them. Pass `|_| {}` to ignore it.
+    fn get<P: AsRef<Path>, W: Write, F: Fn(usize)>(
+        &self,
+        source: P,
+        target: &mut W,
+        progress: F,
+    ) -> Result<(), TransferError>;
 
     fn rm<P: AsRef<Path>>(&self, path: P) -> Result<(), TransferError>;
 
@@ -125,10 +131,11 @@ impl<T: SshConnection> FileTransfer for T {
         Ok(())
     }
 
-    fn get<P: AsRef<Path>, W: Write>(
+    fn get<P: AsRef<Path>, W: Write, F: Fn(usize)>(
         &self,
         source: P,
         target: &mut W,
+        progress: F,
     ) -> Result<(), TransferError> {
         if let Ok(sftp) = self.maybe_sftp() {
             let mut file = sftp.open(
@@ -136,7 +143,7 @@ impl<T: SshConnection> FileTransfer for T {
                 OpenFlags::READ_ONLY,
                 0,
             )?;
-            std::io::copy(&mut file, target)?;
+            copy_with_progress(&mut file, target, progress)?;
         } else {
             let ch = self.session().new_channel()?;
             ch.open_session()?;
@@ -144,7 +151,7 @@ impl<T: SshConnection> FileTransfer for T {
                 "cat {}",
                 snailquote::escape(source.as_ref().to_slash_lossy().as_ref())
             ))?;
-            std::io::copy(&mut ch.stdout(), target)?;
+            copy_with_progress(&mut ch.stdout(), target, progress)?;
             let result_code = ch.get_exit_status().unwrap_or(0) as i32;
             ch.close()?;
             if result_code != 0 {
