@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use ares_connection_lib::DeviceSetupManager;
 use ares_connection_lib::session::{DeviceSession, NewSession};
+use ares_device_lib::cli::unwrap_or_exit;
 use ares_device_lib::{DeviceManager, PrivateKey};
 use clap::Parser;
 use libssh_rs::Error as SshError;
@@ -91,10 +92,7 @@ fn forward(manager: &DeviceManager, device: Option<&str>, port_spec: Option<&str
         exit(1);
     };
 
-    let session = device.new_session().unwrap_or_else(|e| {
-        eprintln!("Failed to connect to {}: {e:?}", device.host);
-        exit(1);
-    });
+    let session = unwrap_or_exit(device.new_session(), &format!("connect to {}", device.host));
     let session = Arc::new(session);
 
     let listener = unwrap_or_exit(
@@ -248,13 +246,6 @@ fn write_key(path: &Path, content: &str) -> Result<(), std::io::Error> {
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
     }
     Ok(())
-}
-
-fn unwrap_or_exit<T>(result: Result<T, std::io::Error>, action: &str) -> T {
-    result.unwrap_or_else(|e| {
-        eprintln!("Failed to {action}: {e}");
-        exit(1);
-    })
 }
 
 #[cfg(test)]

@@ -4,6 +4,7 @@ use clap::Parser;
 
 mod picker;
 
+use ares_device_lib::cli::unwrap_or_exit;
 use ares_device_lib::{Device, DeviceManager};
 use picker::{DeviceSelection, PickDevice};
 
@@ -33,9 +34,7 @@ fn main() {
         return;
     }
 
-    let device = if let Some(d) = manager.pick(cli.device.as_ref()).unwrap() {
-        d
-    } else {
+    let Some(device) = unwrap_or_exit(manager.pick(cli.device.as_ref()), "find device") else {
         eprintln!("Device not found");
         exit(1);
     };
@@ -43,10 +42,7 @@ fn main() {
 }
 
 fn list_devices(manager: &DeviceManager) {
-    let devices = manager.list().unwrap_or_else(|e| {
-        eprintln!("Failed to list devices: {e:?}");
-        exit(1);
-    });
+    let devices = unwrap_or_exit(manager.list(), "list devices");
 
     let headers = ["name", "deviceinfo", "connection", "profile", "passphrase"];
     let rows: Vec<[String; 5]> = devices.iter().map(device_row).collect();

@@ -4,6 +4,7 @@ use std::process::exit;
 
 use ares_connection_lib::session::NewSession;
 use ares_device_lib::DeviceManager;
+use ares_device_lib::cli::unwrap_or_exit;
 use clap::Parser;
 use libssh_rs::{Error as SshError, OpenFlags};
 use path_slash::PathBufExt;
@@ -64,17 +65,12 @@ fn sftp_reason(code: u32) -> &'static str {
 fn main() {
     let cli = Cli::parse();
     let manager = DeviceManager::default();
-    let Some(device) = manager.find_or_default(cli.device.as_ref()).unwrap() else {
+    let Some(device) = unwrap_or_exit(manager.find_or_default(cli.device.as_ref()), "find device")
+    else {
         eprintln!("Device not found");
         exit(1);
     };
-    let session = match device.new_session() {
-        Ok(session) => session,
-        Err(e) => {
-            eprintln!("Failed to connect to {}: {e:?}", device.name);
-            exit(1);
-        }
-    };
+    let session = unwrap_or_exit(device.new_session(), &format!("connect to {}", device.name));
     let sftp = match session.sftp() {
         Ok(sftp) => sftp,
         Err(e) => {

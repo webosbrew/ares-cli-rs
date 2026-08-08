@@ -5,6 +5,7 @@ use std::process::exit;
 
 use ares_connection_lib::session::NewSession;
 use ares_device_lib::DeviceManager;
+use ares_device_lib::cli::unwrap_or_exit;
 use clap::Parser;
 use libssh_rs::{FileType, OpenFlags, Sftp};
 
@@ -42,12 +43,13 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
     let manager = DeviceManager::default();
-    let Some(device) = manager.find_or_default(cli.device.as_ref()).unwrap() else {
+    let Some(device) = unwrap_or_exit(manager.find_or_default(cli.device.as_ref()), "find device")
+    else {
         eprintln!("Device not found");
         exit(1);
     };
-    let session = device.new_session().unwrap();
-    let sftp = session.sftp().unwrap();
+    let session = unwrap_or_exit(device.new_session(), &format!("connect to {}", device.name));
+    let sftp = unwrap_or_exit(session.sftp(), "start SFTP");
 
     let target = resolve_target(&cli.source, &cli.destination);
     if let Err(e) = pull(&sftp, &cli.source, &target, cli.ignore) {

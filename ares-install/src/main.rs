@@ -3,6 +3,7 @@ use std::process::exit;
 
 use ares_connection_lib::session::NewSession;
 use ares_device_lib::DeviceManager;
+use ares_device_lib::cli::unwrap_or_exit;
 use clap::Parser;
 use install::InstallApp;
 use list::ListApps;
@@ -59,13 +60,12 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
     let manager = DeviceManager::default();
-    let device = manager.find_or_default(cli.device.as_ref()).unwrap();
-    if device.is_none() {
+    let Some(device) = unwrap_or_exit(manager.find_or_default(cli.device.as_ref()), "find device")
+    else {
         eprintln!("Device not found");
         exit(1);
-    }
-    let device = device.unwrap();
-    let session = device.new_session().unwrap();
+    };
+    let session = unwrap_or_exit(device.new_session(), &format!("connect to {}", device.name));
     if cli.list || cli.list_full {
         session.list_apps(cli.list_full, cli.app_type.as_deref());
     } else if let Some(id) = cli.remove {
@@ -73,7 +73,7 @@ fn main() {
         match session.remove_app(&id) {
             Ok(_) => println!("{id} removed."),
             Err(e) => {
-                eprintln!("Failed to remove {id}: {e:?}");
+                eprintln!("Failed to remove {id}: {e}");
                 exit(1);
             }
         }
@@ -81,7 +81,7 @@ fn main() {
         match session.install_app(package) {
             Ok(_) => {}
             Err(e) => {
-                eprintln!("Failed to install: {e:?}");
+                eprintln!("Failed to install: {e}");
                 exit(1);
             }
         }

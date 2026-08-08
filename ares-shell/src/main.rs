@@ -41,14 +41,15 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
     let manager = DeviceManager::default();
-    let Some(device) = manager.find_or_default(cli.device.as_ref()).unwrap() else {
+    // A local failure exits 255, so it can't be mistaken for the remote command's status.
+    let Some(device) = fail(manager.find_or_default(cli.device.as_ref()), "find device") else {
         eprintln!("Device not found");
         exit(255);
     };
 
-    let session = device.new_session().unwrap();
-    let ch = session.new_channel().unwrap();
-    ch.open_session().unwrap();
+    let session = fail(device.new_session(), &format!("connect to {}", device.name));
+    let ch = fail(session.new_channel(), "open a channel");
+    fail(ch.open_session(), "open a session");
     let mut has_pty = false;
     if !cli.no_pty && (cli.pty || stdout().is_tty()) {
         let (width, height) = terminal::size().unwrap_or((80, 24));
@@ -67,9 +68,9 @@ fn main() {
     }
     let run_command = cli.run.is_some();
     if let Some(command) = cli.run {
-        ch.request_exec(&command).unwrap();
+        fail(ch.request_exec(&command), "run the command");
     } else {
-        ch.request_shell().unwrap();
+        fail(ch.request_shell(), "start a shell");
     }
     // Without a remote pty the shell has no prompt, no echo and no line editing.
     // Draw them locally instead, as long as there is a user in front of us.
@@ -85,8 +86,16 @@ fn main() {
     match result {
         Ok(code) => exit(code),
         Err(e) => {
-            eprintln!("Error: {:?}", e);
-            exit(1);
+            eprintln!("Error: {e}");
+            exit(255);
         }
     }
+}
+
+/// Return the value, or print `Failed to <action>: <error>` and exit with code 255.
+fn fail<T, E: std::fmt::Display>(result: Result<T, E>, action: &str) -> T {
+    result.unwrap_or_else(|e| {
+        eprintln!("Failed to {action}: {e}");
+        exit(255);
+    })
 }

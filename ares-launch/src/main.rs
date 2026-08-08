@@ -2,6 +2,7 @@ use std::process::exit;
 
 use ares_connection_lib::session::NewSession;
 use ares_device_lib::DeviceManager;
+use ares_device_lib::cli::unwrap_or_exit;
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -59,13 +60,12 @@ struct LaunchResponse {
 fn main() {
     let cli = Cli::parse();
     let manager = DeviceManager::default();
-    let device = manager.find_or_default(cli.device.as_ref()).unwrap();
-    if device.is_none() {
+    let Some(device) = unwrap_or_exit(manager.find_or_default(cli.device.as_ref()), "find device")
+    else {
         eprintln!("Device not found");
         exit(1);
-    }
-    let device = device.unwrap();
-    let session = device.new_session().unwrap();
+    };
+    let session = unwrap_or_exit(device.new_session(), &format!("connect to {}", device.name));
 
     if cli.running {
         session.list_running();
