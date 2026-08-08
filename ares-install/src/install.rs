@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::{Error as IoError, ErrorKind};
 use std::path::Path;
@@ -18,10 +19,30 @@ pub(crate) trait InstallApp {
 #[derive(Debug)]
 pub enum InstallError {
     Response { error_code: i32, reason: String },
+    ChecksumMismatch { expected: String, actual: String },
     Luna(LunaError),
     Transfer(TransferError),
     Io(IoError),
 }
+
+impl Display for InstallError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InstallError::Response { error_code, reason } => {
+                write!(f, "{reason} (error {error_code})")
+            }
+            InstallError::ChecksumMismatch { expected, actual } => write!(
+                f,
+                "uploaded package is corrupted: expected sha256 {expected}, device has {actual}"
+            ),
+            InstallError::Luna(e) => write!(f, "{e}"),
+            InstallError::Transfer(e) => write!(f, "{e}"),
+            InstallError::Io(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl std::error::Error for InstallError {}
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -85,46 +106,56 @@ impl InstallApp for DeviceSession {
             pb.set_position(transferred as u64);
         })?;
 
-        pb.suspend(|| {
-            println!(
-                "Installing {} on {}...",
-                package_display_name, self.device.name
-            )
-        });
-        pb.set_prefix("Installing");
-
         let spinner_style =
             ProgressStyle::with_template("{prefix:10.bold.dim} {spinner} {wide_msg}").unwrap();
         pb.set_style(spinner_style);
 
-        let result = match self.subscribe(
-            "luna://com.webos.appInstallService/dev/install",
-            InstallPayload {
-                id: String::from("com.ares.defaultName"),
-                ipk_url: ipk_path.clone(),
-                subscribe: true,
-            },
-            true,
-        ) {
-            Ok(subscription) => subscription
-                .filter_map(|item| {
-                    map_installer_message(
-                        item,
-                        &Regex::new(r"(?i)installed").unwrap(),
-                        |progress| {
-                            pb.set_message(
-                                progress
-                                    .strip_prefix("installing : ")
-                                    .unwrap_or(&progress)
-                                    .to_string(),
-                            );
-                        },
-                    )
-                })
-                .next()
-                .unwrap_or_else(|| Ok(String::new())),
-            Err(e) => Err(e.into()),
-        };
+        pb.set_prefix("Verifying");
+        pb.set_message("Checking uploaded package");
+        let verified = verify_upload(self, &ipk_path, &checksum);
+        if let Err(e) = &verified {
+            pb.suspend(|| eprintln!("Upload of {package_display_name} is broken: {e:?}"));
+        }
+
+        let result = verified.and_then(|_| {
+            pb.suspend(|| {
+                println!(
+                    "Installing {} on {}...",
+                    package_display_name, self.device.name
+                )
+            });
+            pb.set_prefix("Installing");
+            pb.set_message("");
+
+            match self.subscribe(
+                "luna://com.webos.appInstallService/dev/install",
+                InstallPayload {
+                    id: String::from("com.ares.defaultName"),
+                    ipk_url: ipk_path.clone(),
+                    subscribe: true,
+                },
+                true,
+            ) {
+                Ok(subscription) => subscription
+                    .filter_map(|item| {
+                        map_installer_message(
+                            item,
+                            &Regex::new(r"(?i)installed").unwrap(),
+                            |progress| {
+                                pb.set_message(
+                                    progress
+                                        .strip_prefix("installing : ")
+                                        .unwrap_or(&progress)
+                                        .to_string(),
+                                );
+                            },
+                        )
+                    })
+                    .next()
+                    .unwrap_or_else(|| Ok(String::new())),
+                Err(e) => Err(e.into()),
+            }
+        });
 
         if let Ok(package_id) = &result {
             pb.suspend(|| println!("Installed package {}!", package_id));
@@ -144,6 +175,24 @@ impl InstallApp for DeviceSession {
         result?;
         Ok(())
     }
+}
+
+/// Compare the uploaded package against the local file. Devices without `sha256sum` skip the check.
+fn verify_upload(
+    session: &DeviceSession,
+    ipk_path: &str,
+    expected: &str,
+) -> Result<(), InstallError> {
+    let Some(actual) = session.sha256sum(ipk_path)? else {
+        return Ok(());
+    };
+    if actual != expected {
+        return Err(InstallError::ChecksumMismatch {
+            expected: expected.to_string(),
+            actual,
+        });
+    }
+    Ok(())
 }
 
 pub(crate) fn map_installer_message<F: Fn(String)>(
