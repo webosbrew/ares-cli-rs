@@ -15,7 +15,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 license = "Apache-2.0"
 authors = ["Mariotaku <git@mariotaku.me>"]
@@ -34,8 +34,8 @@ upper_case_acronyms = "allow"
 [workspace.dependencies]
 # Internal libraries. Both path and version are needed: path for local builds,
 # version for `cargo publish`.
-ares-device-lib = { path = "common/device", version = "0.3.0" }
-ares-connection-lib = { path = "common/connection", version = "0.3.0" }
+ares-device-lib = { path = "common/device", version = "0.4.0" }
+ares-connection-lib = { path = "common/connection", version = "0.4.0" }
 clap = { version = "4.4.6", features = ["derive", "env"] }
 serde = { version = "1.0.214", features = ["derive"] }
 serde_json = "1.0.132"
