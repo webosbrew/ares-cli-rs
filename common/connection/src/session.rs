@@ -10,6 +10,26 @@ pub trait NewSession {
     fn new_session(&self) -> Result<DeviceSession, SessionError>;
 }
 
+/// Open a session to `device` and connect it, with the options a webOS device
+/// needs already set.
+///
+/// The session is not authenticated yet. Call [`authenticate`] next, or use
+/// [`NewSession::new_session`] when the key can be read the ordinary way.
+///
+/// # Errors
+///
+/// Returns the libssh error if an option is rejected or the device cannot be
+/// reached.
+pub fn connect(device: &Device) -> Result<Session, SessionError> {
+    let session = Session::new()?;
+    configure_session(&session)?;
+    session.set_option(SshOption::Hostname(device.host.clone()))?;
+    session.set_option(SshOption::Port(device.port))?;
+    session.set_option(SshOption::User(Some(device.username.clone())))?;
+    session.connect()?;
+    Ok(session)
+}
+
 /// Authenticate a connected session as `device`.
 ///
 /// `key` is the private key itself, in OpenSSH format. The caller reads it,
@@ -169,14 +189,7 @@ impl std::error::Error for SessionError {}
 
 impl NewSession for Device {
     fn new_session(&self) -> Result<DeviceSession, SessionError> {
-        let session = Session::new()?;
-        configure_session(&session)?;
-        session.set_option(SshOption::Hostname(self.host.clone()))?;
-        session.set_option(SshOption::Port(self.port))?;
-        session.set_option(SshOption::User(Some(self.username.clone())))?;
-
-        session.connect()?;
-
+        let session = connect(self)?;
         let key = self
             .private_key
             .as_ref()
