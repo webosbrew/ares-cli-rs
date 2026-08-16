@@ -1,13 +1,16 @@
+use std::collections::HashSet;
+use std::ffi::OsString;
 use std::fs::File;
-use std::path::{Path, PathBuf};
+use std::io::{Error, ErrorKind};
+use std::path::{Component, Path, PathBuf};
 use std::process::exit;
 
 use ares_connection_lib::session::NewSession;
 use ares_device_lib::DeviceManager;
 use ares_device_lib::cli::unwrap_or_exit;
 use clap::Parser;
-use libssh_rs::{Error as SshError, OpenFlags};
-use path_slash::PathBufExt;
+use libssh_rs::{Error as SshError, FileType, OpenFlags, Sftp};
+use path_slash::PathExt;
 use walkdir::WalkDir;
 
 #[derive(Parser, Debug)]
@@ -21,12 +24,14 @@ struct Cli {
         help = "Specify DEVICE to use"
     )]
     device: Option<String>,
+    #[arg(short, long, help = "Hide the detailed copy messages")]
+    ignore: bool,
     #[arg(
         short,
         long,
         help = "Continue on errors instead of stopping at the first failure"
     )]
-    ignore: bool,
+    keep_going: bool,
     #[arg(
         value_name = "SOURCE",
         help = "Path in the host machine, where files exist.",
@@ -41,25 +46,13 @@ struct Cli {
     destination: String,
 }
 
-/// Recover the numeric SFTP status code from a libssh error. `SftpError`'s code
-/// field is private, so parse it out of the Display text ("Sftp error code N").
-/// Returns `None` for non-SFTP errors.
-fn sftp_status(e: &SshError) -> Option<u32> {
-    if !matches!(e, SshError::Sftp(_)) {
-        return None;
-    }
-    e.to_string().rsplit(' ').next()?.parse().ok()
-}
-
-/// Human-readable reason for an SFTP status code (subset of SSH_FX_* codes).
-fn sftp_reason(code: u32) -> &'static str {
-    match code {
-        2 => "no such file or directory",
-        3 => "permission denied",
-        4 => "failure",
-        8 => "operation not supported",
-        _ => "SFTP error",
-    }
+/// What DESTINATION already is on the device. ares-cli reads the layout from
+/// this, not from a trailing "/".
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DestKind {
+    Dir,
+    File,
+    Missing,
 }
 
 fn main() {
@@ -78,85 +71,364 @@ fn main() {
             exit(1);
         }
     };
-    for source in cli.source {
-        let walker = WalkDir::new(&source).contents_first(false);
-        let dest_base = Path::new(&cli.destination);
-        let mut source_prefix: &Path = &source;
-        if cli.destination.ends_with("/") {
-            if let Some(parent) = source_prefix.parent() {
-                source_prefix = parent;
+
+    let dest_kind = dest_kind(&sftp, &cli.destination);
+    let single = cli.source.len() == 1;
+    if dest_kind == DestKind::File && !single {
+        eprintln!(
+            "Failed to push: {} is a file, so it can hold only one SOURCE",
+            cli.destination
+        );
+        exit(1);
+    }
+
+    let mut push = Push {
+        sftp: &sftp,
+        quiet: cli.ignore,
+        keep_going: cli.keep_going,
+        made_dirs: HashSet::new(),
+        failed: false,
+    };
+    for source in &cli.source {
+        if let Err(e) = push.source(source, &cli.destination, dest_kind, single) {
+            eprintln!("Failed to push {}: {e}", source.display());
+            if !push.keep_going {
+                exit(1);
             }
+            push.failed = true;
         }
-        for entry in walker {
-            match entry {
-                Ok(entry) => {
-                    let file_type = entry.file_type();
-                    let dest_path =
-                        dest_base.join(entry.path().strip_prefix(source_prefix).unwrap());
-                    let dest_display = dest_path.to_slash_lossy();
-                    if file_type.is_dir() {
-                        println!("{} => {}", entry.path().to_string_lossy(), dest_display);
-                        // A directory that already exists reports an error we can
-                        // safely ignore; a genuine failure surfaces when we try to
-                        // write a file into it below.
-                        sftp.create_dir(dest_display.as_ref(), 0o755).unwrap_or(());
-                    } else if file_type.is_file() {
-                        println!("{} => {}", entry.path().to_string_lossy(), dest_display);
-                        let mut file = match sftp.open(
-                            dest_display.as_ref(),
-                            OpenFlags::WRITE_ONLY | OpenFlags::CREATE | OpenFlags::TRUNCATE,
-                            0o644,
-                        ) {
-                            Ok(file) => file,
-                            Err(e) => {
-                                match sftp_status(&e) {
-                                    Some(code) => {
-                                        eprintln!(
-                                            "Failed to write {dest_display}: {} (SFTP code {code})",
-                                            sftp_reason(code)
-                                        );
-                                        if code == 3 {
-                                            eprintln!(
-                                                "  The destination may not be writable on this \
-                                                 device; try a different path."
-                                            );
-                                        }
-                                    }
-                                    None => eprintln!("Failed to write {dest_display}: {e}"),
-                                }
-                                if !cli.ignore {
-                                    exit(1);
-                                }
-                                continue;
-                            }
-                        };
-                        let mut loc_file = match File::open(entry.path()) {
-                            Ok(loc_file) => loc_file,
-                            Err(e) => {
-                                eprintln!("Failed to read {}: {e}", entry.path().to_string_lossy());
-                                if !cli.ignore {
-                                    exit(1);
-                                }
-                                continue;
-                            }
-                        };
-                        if let Err(e) = std::io::copy(&mut loc_file, &mut file) {
-                            eprintln!("Failed to write {dest_display}: {e}");
-                            if !cli.ignore {
-                                exit(1);
-                            }
-                        }
-                    } else if file_type.is_symlink() {
-                        eprintln!("Skipping symlink {}", entry.path().to_string_lossy());
-                    }
-                }
+    }
+    if push.failed {
+        exit(1);
+    }
+}
+
+struct Push<'a> {
+    sftp: &'a Sftp,
+    quiet: bool,
+    keep_going: bool,
+    /// Device paths we already made, so a run does not stat the same directory
+    /// once per file.
+    made_dirs: HashSet<String>,
+    /// Set when --keep-going swallowed a failure, so the exit code still says so.
+    failed: bool,
+}
+
+impl Push<'_> {
+    /// Copy one SOURCE. `dest` is DESTINATION as typed, `kind` what it already
+    /// is on the device, and `single` whether it is the only SOURCE.
+    fn source(
+        &mut self,
+        source: &Path,
+        dest: &str,
+        kind: DestKind,
+        single: bool,
+    ) -> Result<(), Error> {
+        // Follow a symlinked SOURCE, the same way walkdir follows the root.
+        let source_is_dir = std::fs::metadata(source)?.is_dir();
+        let root = resolve_dest(dest, kind, source, source_is_dir, single)?;
+
+        for entry in WalkDir::new(source) {
+            let entry = match entry {
+                Ok(entry) => entry,
                 Err(e) => {
-                    eprintln!("Failed to push file: {e:?}");
-                    if !cli.ignore {
-                        exit(1);
-                    }
+                    self.item_failed(&source.to_string_lossy(), Error::from(e))?;
+                    continue;
                 }
+            };
+            let Ok(relative) = entry.path().strip_prefix(source) else {
+                continue;
+            };
+            let target = if relative.as_os_str().is_empty() {
+                root.clone()
+            } else {
+                root.join(relative)
+            };
+            let target = target.to_slash_lossy().to_string();
+
+            let file_type = entry.file_type();
+            let result = if file_type.is_dir() {
+                self.report(entry.path(), &target);
+                self.mkdir_p(&target)
+            } else if file_type.is_symlink() {
+                // ares-cli reads through a symlink to a file and copies the
+                // content. A symlink to a directory makes it fail, so skip that.
+                match std::fs::metadata(entry.path()) {
+                    Ok(metadata) if metadata.is_dir() => {
+                        eprintln!(
+                            "Skipping {}: it is a symlink to a directory",
+                            entry.path().display()
+                        );
+                        Ok(())
+                    }
+                    Ok(_) => self.put_file(entry.path(), &target),
+                    Err(e) => Err(e),
+                }
+            } else {
+                self.put_file(entry.path(), &target)
+            };
+            if let Err(e) = result {
+                self.item_failed(&entry.path().to_string_lossy(), e)?;
             }
         }
+        Ok(())
+    }
+
+    fn put_file(&mut self, local: &Path, target: &str) -> Result<(), Error> {
+        if let Some(parent) = parent_of(target) {
+            self.mkdir_p(parent)?;
+        }
+        self.report(local, target);
+        let mut remote = self
+            .sftp
+            .open(
+                target,
+                OpenFlags::WRITE_ONLY | OpenFlags::CREATE | OpenFlags::TRUNCATE,
+                0o644,
+            )
+            .map_err(|e| sftp_error(target, &e))?;
+        let mut source = File::open(local)?;
+        std::io::copy(&mut source, &mut remote)?;
+        Ok(())
+    }
+
+    /// Make `path` and every missing parent, the way `mkdir -p` does.
+    fn mkdir_p(&mut self, path: &str) -> Result<(), Error> {
+        if path.is_empty() || path == "/" || path == "." || self.made_dirs.contains(path) {
+            return Ok(());
+        }
+        let sftp = self.sftp;
+        if !is_dir(sftp, path) {
+            if let Some(parent) = parent_of(path) {
+                self.mkdir_p(parent)?;
+            }
+            // Another writer may win the race, so a failure only counts when the
+            // directory still is not there.
+            if let Err(e) = sftp.create_dir(path, 0o755)
+                && !is_dir(sftp, path)
+            {
+                return Err(sftp_error(path, &e));
+            }
+        }
+        self.made_dirs.insert(path.to_string());
+        Ok(())
+    }
+
+    fn report(&self, local: &Path, target: &str) {
+        if !self.quiet {
+            println!("{} => {target}", local.display());
+        }
+    }
+
+    /// Handle a failure on one item. Returns the error to stop the whole copy,
+    /// or Ok to go on when --keep-going is set.
+    fn item_failed(&mut self, what: &str, e: Error) -> Result<(), Error> {
+        if !self.keep_going {
+            return Err(e);
+        }
+        eprintln!("Skipping {what}: {e}");
+        self.failed = true;
+        Ok(())
+    }
+}
+
+/// Where SOURCE itself lands on the device.
+///
+/// This follows ares-cli: a directory always keeps its own name under
+/// DESTINATION, and a lone file keeps its name only when DESTINATION already is
+/// a directory. A trailing "/" changes nothing.
+fn resolve_dest(
+    dest: &str,
+    kind: DestKind,
+    source: &Path,
+    source_is_dir: bool,
+    single: bool,
+) -> Result<PathBuf, Error> {
+    let dest_path = Path::new(dest);
+    if source_is_dir {
+        if kind == DestKind::File {
+            return Err(Error::new(
+                ErrorKind::AlreadyExists,
+                format!("{dest} is a file, and SOURCE is a directory"),
+            ));
+        }
+    } else if single && kind != DestKind::Dir {
+        // One file onto a free path, or onto a file to overwrite.
+        return Ok(dest_path.to_path_buf());
+    }
+    Ok(match source_name(source)? {
+        Some(name) => dest_path.join(name),
+        None => dest_path.to_path_buf(),
+    })
+}
+
+/// Name that SOURCE takes on the device.
+///
+/// `Path::file_name` gives None for ".", ".." and "/". "." copies the contents,
+/// the way `cp -r . dest` does, so it has no name of its own. The rest resolve
+/// to a real directory name.
+fn source_name(path: &Path) -> Result<Option<OsString>, Error> {
+    if let Some(name) = path.file_name() {
+        return Ok(Some(name.to_os_string()));
+    }
+    if path.components().all(|c| c == Component::CurDir) {
+        return Ok(None);
+    }
+    let resolved = path.canonicalize()?;
+    match resolved.file_name() {
+        Some(name) => Ok(Some(name.to_os_string())),
+        None => Err(Error::new(
+            ErrorKind::InvalidInput,
+            format!("{} has no name to copy", path.display()),
+        )),
+    }
+}
+
+fn dest_kind(sftp: &Sftp, path: &str) -> DestKind {
+    match sftp.metadata(path).map(|m| m.file_type()) {
+        Ok(Some(FileType::Directory)) => DestKind::Dir,
+        Ok(_) => DestKind::File,
+        Err(_) => DestKind::Missing,
+    }
+}
+
+fn is_dir(sftp: &Sftp, path: &str) -> bool {
+    matches!(
+        sftp.metadata(path).map(|m| m.file_type()),
+        Ok(Some(FileType::Directory))
+    )
+}
+
+/// Parent of a device path, which always uses "/". Returns None when the path
+/// has no parent to make.
+fn parent_of(path: &str) -> Option<&str> {
+    let (head, _) = path.trim_end_matches('/').rsplit_once('/')?;
+    Some(if head.is_empty() { "/" } else { head })
+}
+
+/// Recover the numeric SFTP status code from a libssh error. `SftpError`'s code
+/// field is private, so parse it out of the Display text ("Sftp error code N").
+/// Returns `None` for non-SFTP errors.
+fn sftp_status(e: &SshError) -> Option<u32> {
+    if !matches!(e, SshError::Sftp(_)) {
+        return None;
+    }
+    e.to_string().rsplit(' ').next()?.parse().ok()
+}
+
+/// Human-readable reason for an SFTP status code (subset of `SSH_FX_*` codes).
+fn sftp_reason(code: u32) -> &'static str {
+    match code {
+        2 => "no such file or directory",
+        3 => "permission denied",
+        4 => "failure",
+        8 => "operation not supported",
+        _ => "SFTP error",
+    }
+}
+
+fn sftp_error(path: &str, e: &SshError) -> Error {
+    match sftp_status(e) {
+        Some(3) => Error::new(
+            ErrorKind::PermissionDenied,
+            format!(
+                "{path}: permission denied. The destination may not be writable on this device, \
+                 so try a different path."
+            ),
+        ),
+        Some(code) => Error::other(format!("{path}: {} (SFTP code {code})", sftp_reason(code))),
+        None => Error::other(format!("{path}: {e}")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::{DestKind, parent_of, resolve_dest};
+
+    fn dest(source: &str, destination: &str, kind: DestKind, is_dir: bool, single: bool) -> String {
+        resolve_dest(destination, kind, Path::new(source), is_dir, single)
+            .expect("resolve_dest")
+            .to_string_lossy()
+            .replace('\\', "/")
+    }
+
+    #[test]
+    fn a_lone_file_takes_the_destination_name() {
+        for kind in [DestKind::Missing, DestKind::File] {
+            assert_eq!(dest("a.txt", "/tmp/b.txt", kind, false, true), "/tmp/b.txt");
+        }
+    }
+
+    #[test]
+    fn a_lone_file_keeps_its_name_under_a_directory() {
+        assert_eq!(
+            dest("a.txt", "/tmp", DestKind::Dir, false, true),
+            "/tmp/a.txt"
+        );
+    }
+
+    #[test]
+    fn many_files_go_into_the_destination() {
+        for kind in [DestKind::Dir, DestKind::Missing] {
+            assert_eq!(dest("a.txt", "/tmp", kind, false, false), "/tmp/a.txt");
+        }
+    }
+
+    #[test]
+    fn a_directory_always_keeps_its_own_name() {
+        // The point of the ares-cli rule: "build" lands as /tmp/out/build, even
+        // when /tmp/out already is a directory.
+        for kind in [DestKind::Dir, DestKind::Missing] {
+            assert_eq!(
+                dest("build", "/tmp/out", kind, true, true),
+                "/tmp/out/build"
+            );
+        }
+    }
+
+    #[test]
+    fn a_trailing_slash_changes_nothing() {
+        assert_eq!(
+            dest("build", "/tmp/out/", DestKind::Dir, true, true),
+            "/tmp/out/build"
+        );
+        assert_eq!(
+            dest("build/", "/tmp/out", DestKind::Dir, true, true),
+            "/tmp/out/build"
+        );
+        assert_eq!(
+            dest("a.txt", "/tmp/", DestKind::Dir, false, true),
+            "/tmp/a.txt"
+        );
+    }
+
+    #[test]
+    fn a_dot_source_copies_its_contents() {
+        assert_eq!(dest(".", "/tmp/out", DestKind::Dir, true, true), "/tmp/out");
+        assert_eq!(
+            dest("./", "/tmp/out", DestKind::Missing, true, true),
+            "/tmp/out"
+        );
+    }
+
+    #[test]
+    fn a_directory_onto_a_file_is_an_error() {
+        assert!(
+            resolve_dest("/tmp/a.txt", DestKind::File, Path::new("build"), true, true).is_err()
+        );
+    }
+
+    #[test]
+    fn parents_stop_at_the_root() {
+        assert_eq!(parent_of("/media/developer/apps"), Some("/media/developer"));
+        assert_eq!(
+            parent_of("/media/developer/apps/"),
+            Some("/media/developer")
+        );
+        assert_eq!(parent_of("/media"), Some("/"));
+        assert_eq!(parent_of("/"), None);
+        assert_eq!(parent_of("app.ipk"), None);
     }
 }
