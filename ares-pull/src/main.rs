@@ -4,10 +4,10 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 
 use ares_connection_lib::session::NewSession;
+use ares_connection_lib::transfer::{PathKind, Transfer, TransferError};
 use ares_device_lib::DeviceManager;
 use ares_device_lib::cli::unwrap_or_exit;
 use clap::Parser;
-use libssh_rs::{Error as SshError, FileType, OpenFlags, Sftp};
 
 #[derive(Parser, Debug)]
 #[command(about)]
@@ -55,10 +55,12 @@ fn main() {
         exit(1);
     };
     let session = unwrap_or_exit(device.new_session(), &format!("connect to {}", device.name));
-    let sftp = unwrap_or_exit(session.sftp(), "start SFTP");
+    // Open the transport once. It is SFTP unless the device is set to stream,
+    // and a copy of many files would otherwise pay a handshake per file.
+    let transfer = Transfer::open(&session);
 
     let mut pull = Pull {
-        sftp: &sftp,
+        transfer: &transfer,
         quiet: cli.ignore,
         keep_going: cli.keep_going,
         failed: false,
@@ -73,7 +75,7 @@ fn main() {
 }
 
 struct Pull<'a> {
-    sftp: &'a Sftp,
+    transfer: &'a Transfer<'a>,
     quiet: bool,
     keep_going: bool,
     /// Set when --keep-going swallowed a failure, so the exit code still says so.
@@ -82,8 +84,14 @@ struct Pull<'a> {
 
 impl Pull<'_> {
     fn run(&mut self, source: &str, destination: &str) -> Result<(), Error> {
-        let source_is_dir = is_dir(self.sftp, source)
-            .map_err(|e| Error::new(e.kind(), format!("SOURCE {source}: {e}")))?;
+        let source_kind = self.stat(source)?;
+        if source_kind == PathKind::Missing {
+            return Err(Error::new(
+                ErrorKind::NotFound,
+                format!("SOURCE {source} does not exist on the device"),
+            ));
+        }
+        let source_is_dir = source_kind == PathKind::Dir;
         let target = resolve_target(
             source,
             destination,
@@ -96,50 +104,47 @@ impl Pull<'_> {
                 format!("{} is not a directory", target.display()),
             ));
         }
-        self.copy(source, &target, 0)
+        self.copy(source, source_kind, &target, 0)
     }
 
-    fn copy(&mut self, remote: &str, local: &Path, depth: usize) -> Result<(), Error> {
-        let file_type = match self.sftp.metadata(remote).map(|m| m.file_type()) {
-            Ok(file_type) => file_type,
-            Err(e) => {
-                // ares-cli walks with `find -follow`, which lists a broken
-                // symlink as neither a file nor a directory and skips it.
-                if matches!(
-                    self.sftp.symlink_metadata(remote).map(|m| m.file_type()),
-                    Ok(Some(FileType::Symlink))
-                ) {
-                    eprintln!("Skipping {remote}: it is a broken symlink");
-                    return Ok(());
+    fn copy(
+        &mut self,
+        remote: &str,
+        kind: PathKind,
+        local: &Path,
+        depth: usize,
+    ) -> Result<(), Error> {
+        match kind {
+            PathKind::Dir => {
+                if depth >= MAX_DEPTH {
+                    return Err(Error::new(
+                        ErrorKind::InvalidData,
+                        format!("{remote} is nested too deep, which usually means a symlink loop"),
+                    ));
                 }
-                return Err(sftp_error(remote, &e));
+                self.copy_dir(remote, local, depth)
             }
-        };
-        if file_type == Some(FileType::Directory) {
-            if depth >= MAX_DEPTH {
-                return Err(Error::new(
-                    ErrorKind::InvalidData,
-                    format!("{remote} is nested too deep, which usually means a symlink loop"),
-                ));
+            PathKind::File => self.copy_file(remote, local),
+            // ares-cli walks with `find -follow`, which lists a device node or a
+            // broken symlink as neither a file nor a directory and skips it.
+            PathKind::Other | PathKind::Missing => {
+                eprintln!("Skipping {remote}: it is not a file or a directory");
+                Ok(())
             }
-            self.copy_dir(remote, local, depth)
-        } else {
-            self.copy_file(remote, local)
         }
     }
 
     fn copy_dir(&mut self, remote: &str, local: &Path, depth: usize) -> Result<(), Error> {
-        let sftp = self.sftp;
         create_dir_all(local)?;
         self.report(remote, local);
-        for entry in sftp.read_dir(remote).map_err(|e| sftp_error(remote, &e))? {
-            let Some(name) = entry.name() else { continue };
-            if name == "." || name == ".." {
-                continue;
-            }
-            let child_remote = format!("{}/{name}", remote.trim_end_matches('/'));
-            let child_local = local.join(name);
-            if let Err(e) = self.copy(&child_remote, &child_local, depth + 1) {
+        let entries = self
+            .transfer
+            .read_dir(remote)
+            .map_err(|e| transfer_error(remote, &e))?;
+        for entry in entries {
+            let child_remote = format!("{}/{}", remote.trim_end_matches('/'), entry.name);
+            let child_local = local.join(&entry.name);
+            if let Err(e) = self.copy(&child_remote, entry.kind, &child_local, depth + 1) {
                 self.item_failed(&child_remote, e)?;
             }
         }
@@ -151,13 +156,16 @@ impl Pull<'_> {
             create_dir_all(parent)?;
         }
         self.report(remote, local);
-        let mut remote_file = self
-            .sftp
-            .open(remote, OpenFlags::READ_ONLY, 0)
-            .map_err(|e| sftp_error(remote, &e))?;
         let mut local_file = File::create(local)?;
-        std::io::copy(&mut remote_file, &mut local_file)?;
-        Ok(())
+        self.transfer
+            .get(remote, &mut local_file, |_| {})
+            .map_err(|e| transfer_error(remote, &e))
+    }
+
+    fn stat(&self, remote: &str) -> Result<PathKind, Error> {
+        self.transfer
+            .stat(remote)
+            .map_err(|e| transfer_error(remote, &e))
     }
 
     fn report(&self, remote: &str, local: &Path) {
@@ -210,47 +218,9 @@ fn remote_name(path: &str) -> Option<&str> {
     Some(name)
 }
 
-/// True when `path` is a directory on the device. ares-cli tests with `[ -f ]`
-/// and `[ -d ]`, which both follow symlinks, so follow them here too.
-fn is_dir(sftp: &Sftp, path: &str) -> Result<bool, Error> {
-    let metadata = sftp.metadata(path).map_err(|e| sftp_error(path, &e))?;
-    Ok(metadata.file_type() == Some(FileType::Directory))
-}
-
-/// Recover the numeric SFTP status code from a libssh error. `SftpError`'s code
-/// field is private, so parse it out of the Display text ("Sftp error code N").
-/// Returns `None` for non-SFTP errors.
-fn sftp_status(e: &SshError) -> Option<u32> {
-    if !matches!(e, SshError::Sftp(_)) {
-        return None;
-    }
-    e.to_string().rsplit(' ').next()?.parse().ok()
-}
-
-/// Human-readable reason for an SFTP status code (subset of `SSH_FX_*` codes).
-fn sftp_reason(code: u32) -> &'static str {
-    match code {
-        2 => "no such file or directory",
-        3 => "permission denied",
-        4 => "failure",
-        8 => "operation not supported",
-        _ => "SFTP error",
-    }
-}
-
-fn sftp_error(path: &str, e: &SshError) -> Error {
-    match sftp_status(e) {
-        Some(2) => Error::new(
-            ErrorKind::NotFound,
-            format!("{path} does not exist on the device"),
-        ),
-        Some(3) => Error::new(
-            ErrorKind::PermissionDenied,
-            format!("{path}: permission denied"),
-        ),
-        Some(code) => Error::other(format!("{path}: {} (SFTP code {code})", sftp_reason(code))),
-        None => Error::other(format!("{path}: {e}")),
-    }
+/// Name the path a transfer failed on.
+fn transfer_error(path: &str, e: &TransferError) -> Error {
+    Error::other(format!("{path}: {e}"))
 }
 
 #[cfg(test)]

@@ -47,6 +47,19 @@ ares-pull -d tv /var/log/messages
 ares-pull -d tv /media/developer/apps ./backup
 ```
 
+## Devices without SFTP
+
+Some firmware has no SFTP subsystem. Set that device to stream, and files move
+over `cat` on a plain exec channel instead:
+
+```sh
+ares-setup-device -m NAME -i files=stream
+```
+
+The path rules and the output are the same either way. `ares-pull` also falls
+back to streaming on its own when a device says SFTP but the session will not
+start.
+
 ## Differences from @webosose/ares-cli
 
 - `-k, --keep-going` skips a file that fails and goes on. The original always
@@ -55,4 +68,5 @@ ares-pull -d tv /media/developer/apps ./backup
   fails with `ENOENT`.
 - Symlinks are followed, as in the original. A broken symlink is skipped with a
   message, and nesting past 64 levels stops with an error instead of looping.
-- The copy runs over SFTP, so the device needs no `find` binary.
+- The walk reads one directory at a time. The original runs `find -follow` over
+  the whole tree, so the device needs no `find`.

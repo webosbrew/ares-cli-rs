@@ -181,7 +181,6 @@ dependencies = [
  "ares-connection-lib",
  "ares-device-lib",
  "clap",
- "libssh-rs",
 ]
 
 [[package]]
@@ -191,7 +190,6 @@ dependencies = [
  "ares-connection-lib",
  "ares-device-lib",
  "clap",
- "libssh-rs",
  "path-slash",
  "walkdir",
 ]
