@@ -49,11 +49,24 @@ ares-push -d tv ./build /media/developer/apps/usr/palm/applications
 ares-push -d tv --keep-going ./a.txt ./b.txt /tmp
 ```
 
+## Devices without SFTP
+
+Some firmware has no SFTP subsystem. Set that device to stream, and files move
+over `cat` on a plain exec channel instead:
+
+```sh
+ares-setup-device -m NAME -i files=stream
+```
+
+The path rules and the output are the same either way. `ares-push` also falls
+back to streaming on its own when a device says SFTP but the session will not
+start.
+
 ## Differences from @webosose/ares-cli
 
 - `-k, --keep-going` skips a file that fails and goes on. The original always
   stops at the first failure. The exit code is still non-zero.
 - A symlink to a file is copied as its content, as in the original. A symlink to
   a directory is skipped with a message instead of failing the copy.
-- A missing parent of DESTINATION is made over SFTP, so the device needs no
-  `mkdir` binary.
+- Missing parents of DESTINATION are made over SFTP where the original always
+  shells out to `mkdir -p`.

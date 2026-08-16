@@ -88,7 +88,7 @@ impl InstallApp for DeviceSession {
             .map(|s| s.to_string_lossy())
             .unwrap_or_else(|| package.as_ref().to_string_lossy());
 
-        self.mkdir(&mut Path::new("/media/developer/temp"), 0o777)?;
+        self.mkdir(Path::new("/media/developer/temp"), 0o777)?;
 
         let pb = ProgressBar::new(file_size);
         pb.suspend(|| {

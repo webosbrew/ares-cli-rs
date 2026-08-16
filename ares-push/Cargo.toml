@@ -18,7 +18,6 @@ workspace = true
 ares-device-lib = { workspace = true }
 ares-connection-lib = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
-libssh-rs = { workspace = true }
 path-slash = "0.2.1"
 walkdir = "2.5.0"
 

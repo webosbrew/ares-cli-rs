@@ -18,7 +18,6 @@ workspace = true
 ares-device-lib = { workspace = true }
 ares-connection-lib = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
-libssh-rs = { workspace = true }
 
 [package.metadata.deb]
 section = "devel"
