@@ -82,10 +82,11 @@ impl DeviceSetupManager for DeviceManager {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use httptest::matchers::request;
     use httptest::responders::status_code;
     use httptest::{Expectation, Server};
+
+    use super::*;
 
     #[test]
     fn fetch_key_404() {

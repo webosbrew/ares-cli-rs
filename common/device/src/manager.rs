@@ -264,9 +264,10 @@ impl DeviceManager {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::fs::{create_dir_all, remove_dir_all, write};
     use std::sync::atomic::{AtomicU32, Ordering};
+
+    use super::*;
 
     fn temp_manager(label: &str) -> (DeviceManager, PathBuf) {
         static COUNTER: AtomicU32 = AtomicU32::new(0);
@@ -330,7 +331,9 @@ mod tests {
         });
         let stored = manager.add(&tv).unwrap();
 
-        assert!(matches!(stored.private_key, Some(PrivateKey::Name { name }) if name == "webos_tv"));
+        assert!(
+            matches!(stored.private_key, Some(PrivateKey::Name { name }) if name == "webos_tv")
+        );
         remove_dir_all(&dir).ok();
     }
 
@@ -345,7 +348,9 @@ mod tests {
         });
         let stored = manager.add(&tv).unwrap();
 
-        assert!(matches!(stored.private_key, Some(PrivateKey::Name { name }) if name == "webos_tv"));
+        assert!(
+            matches!(stored.private_key, Some(PrivateKey::Name { name }) if name == "webos_tv")
+        );
         remove_dir_all(&dir).ok();
     }
 
