@@ -24,10 +24,20 @@ pub trait Luna {
 }
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum LunaError {
     Session(SessionError),
     Io(IoError),
+    /// `luna-send` failed and said nothing about why.
     NotAvailable,
+    /// `luna-send` exited non-zero. Carries what it said, so a caller can tell
+    /// "no such service" from "not allowed on this bus" — previously both
+    /// arrived as [`LunaError::NotAvailable`] with the output thrown away.
+    Command {
+        exit_code: i32,
+        stdout: String,
+        stderr: String,
+    },
 }
 
 impl Display for LunaError {
@@ -36,6 +46,17 @@ impl Display for LunaError {
             LunaError::Session(e) => write!(f, "{e}"),
             LunaError::Io(e) => write!(f, "{e}"),
             LunaError::NotAvailable => write!(f, "luna service is not available"),
+            LunaError::Command {
+                exit_code,
+                stdout,
+                stderr,
+            } => {
+                let said = [stderr.trim(), stdout.trim()]
+                    .into_iter()
+                    .find(|s| !s.is_empty())
+                    .unwrap_or("no output");
+                write!(f, "luna-send exited {exit_code}: {said}")
+            }
         }
     }
 }
