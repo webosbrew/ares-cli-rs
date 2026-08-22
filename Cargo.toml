@@ -12,6 +12,7 @@ members = [
     "ares-setup-device",
     "ares-novacom",
     "ares-pull",
+    "ares-do",
 ]
 
 [workspace.package]

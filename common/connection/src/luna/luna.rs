@@ -30,9 +30,24 @@ impl Luna for Session {
         let exit_code = ch.get_exit_status().unwrap_or(0);
         ch.close()?;
         if exit_code == 0 {
-            return Ok(serde_json::from_str(&buf)?);
+            // Some builds print a warning before the reply, so take the last
+            // JSON-looking line rather than the whole of stdout.
+            let reply = buf
+                .lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .next_back()
+                .unwrap_or("");
+            return Ok(serde_json::from_str(reply)?);
         }
-        Err(LunaError::NotAvailable)
+        if stderr.trim().is_empty() && buf.trim().is_empty() {
+            return Err(LunaError::NotAvailable);
+        }
+        Err(LunaError::Command {
+            exit_code,
+            stdout: buf,
+            stderr,
+        })
     }
 
     fn subscribe<P>(&self, uri: &str, payload: P, public: bool) -> Result<Subscription, LunaError>
