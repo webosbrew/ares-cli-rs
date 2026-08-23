@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::thread::sleep;
 use std::time::Duration;
 
+use ares_connection_lib::exec::Exec;
 use ares_connection_lib::session::DeviceSession;
 use ares_connection_lib::transfer::Transfer;
 use clap::Parser;
@@ -22,11 +23,11 @@ use crate::cli::{self, Cli, Command, ExecArgs, FlowLine, LunaArgs, RunArgs, Shot
 use crate::error::DoError;
 use crate::flow::{self, FlowError, Step};
 use crate::key::SendKey;
+use crate::keycode;
 use crate::luna::{self, LunaReply};
 use crate::output::{Reporter, Timer};
 use crate::screenshot::{Capturer, ShotTarget, write_shot};
 use crate::text::TypeText;
-use crate::{exec, keycode};
 
 /// Everything a step needs that does not come from the step itself.
 pub(crate) struct Runner<'a> {
@@ -126,11 +127,11 @@ impl<'a> Runner<'a> {
         let timer = Timer::start();
 
         let reply: Value = if args.public {
-            luna::raw_pub(
+            luna::with(
                 &self.session.session,
                 &args.uri,
                 &payload,
-                self.timeout,
+                luna::options(true, self.timeout),
                 self.reporter,
             )?
         } else {
@@ -168,23 +169,27 @@ impl<'a> Runner<'a> {
     /// the README, this is the one place `ares-do` does not use its own table.
     fn exec(&mut self, args: &ExecArgs) -> Result<(), DoError> {
         let timer = Timer::start();
-        let output = exec::run(&self.session.session, &args.command, self.timeout)?;
+        let output = self
+            .session
+            .session
+            .exec_timeout(&args.command, self.timeout)
+            .map_err(|e| DoError::Exec(e.to_string()))?;
 
         if self.reporter.is_json() {
             self.reporter.event(&json!({
-                "event": "exec", "ok": output.code == 0, "command": args.command,
-                "exitCode": output.code, "stdout": output.stdout, "ms": timer.ms(),
+                "event": "exec", "ok": output.exit_code == 0, "command": args.command,
+                "exitCode": output.exit_code, "stdout": output.stdout, "ms": timer.ms(),
             }));
         } else {
             print!("{}", output.stdout);
         }
 
-        if output.code == 0 {
+        if output.exit_code == 0 {
             Ok(())
         } else {
             Err(DoError::RemoteCommand {
                 command: args.command.clone(),
-                code: output.code,
+                code: output.exit_code,
             })
         }
     }
@@ -573,8 +578,10 @@ pub(crate) fn sweep_leftovers(
     reporter: &Reporter,
 ) {
     let pattern = format!("/tmp/ares-do-{}-*.png", std::process::id());
-    if let Ok(output) = exec::run(&session.session, &format!("rm -f {pattern}"), timeout)
-        && output.code != 0
+    if let Ok(output) = session
+        .session
+        .exec_timeout(&format!("rm -f {pattern}"), timeout)
+        && output.exit_code != 0
     {
         reporter.trace(&format!("could not sweep {pattern}"));
     }
