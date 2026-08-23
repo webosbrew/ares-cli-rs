@@ -144,26 +144,38 @@ optional, so `OK`, `ok`, `ENTER` and `KEY_ENTER` are the same key.
 Unknown names suggest the nearest match, so a typo is one line of output away
 from being fixed.
 
-Which evdev code each button sends is LG's choice, and it is not always the
-name you would guess. The mappings below come from
-`/usr/share/X11/xkb/keycodes/lg` in the firmware, and the surprising ones are
-flagged in `ares-do keys`:
+### Remote buttons are `REMOTE_*`
 
-| Remote button | evdev | Name to use            |
-|---------------|-------|------------------------|
-| OK            | 28    | `OK`, `ENTER`          |
-| Back          | 412   | `GOBACK`, `PREVIOUS`   |
-| Home          | 172   | `HOMEPAGE`             |
-| Launcher      | 125   | `SUPER`, `META`        |
-| Guide         | 362   | `GUIDE`, `PROGRAM`     |
-| Input/Source  | 241   | `SOURCE`, `INPUT`      |
-| Rec List      | 144   | `RECLIST`              |
-| Voice         | 428   | `VOICE`                |
+Which evdev code a button sends is LG's choice, and it is often not the name
+you would guess. Those names are generated from
+`/usr/share/X11/xkb/keycodes/lg` in the firmware and prefixed `REMOTE_`, so
+the button and the kernel key of the same name never get confused:
 
-Two traps hide in that table. `BACK` (158) is a real key and is **not** the
-remote's Back button — it is swallowed before it reaches any window, which is
-what makes it look broken. Use `GOBACK`. Likewise `HOME` (102) is the keyboard
-Home key; the remote's Home is `HOMEPAGE`.
+| Remote button | `REMOTE_*` name                      | evdev |
+|---------------|--------------------------------------|-------|
+| Back          | `REMOTE_BACK`                        | 412   |
+| Exit          | `REMOTE_EXIT`                        | 174   |
+| Settings      | `REMOTE_MENU`, `REMOTE_SETTINGS`     | 139   |
+| Guide         | `REMOTE_GUIDE`, `REMOTE_TVGUIDE`     | 362   |
+| Input         | `REMOTE_TV_VIDEO`, `REMOTE_INPUT_SOURCE` | 241 |
+| Rec List      | `REMOTE_RECLIST`, `REMOTE_RECORD_LIST`   | 144 |
+| Voice         | `REMOTE_VOICE`                       | 428   |
+
+Where LG's name for a button and its meaning differ, both spellings work.
+
+**`BACK` is not the Back button.** 158 is `KEY_BACK`, `XF86Back` in xkb, and a
+real key — it is simply not the one this remote sends, and the platform
+swallows it before any window sees it, which is what makes it look broken. On
+a 49LK5900, `BACK` moved 31k pixels (an animation) where `REMOTE_BACK` moved
+489k and actually dismissed the launcher. Likewise `HOME` (102) is the
+keyboard Home key; the shell's Home is `HOMEPAGE` (172).
+
+Regenerate the table from another set with:
+
+```sh
+ares-do/tools/gen-remote-keys.sh <rootfs>/usr/share/X11/xkb/keycodes/lg \
+    > ares-do/src/keycode/remote.rs
+```
 
 ## Typing text
 
