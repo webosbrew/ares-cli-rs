@@ -25,6 +25,14 @@ Options:
 The architecture is read from the ELF binaries in the app directory. Use
 `--force-arch` when there are none, or when the guess is wrong.
 
+## Directory permissions
+
+Every directory in the package is `0777`, which is what `ares-cli` produces: it
+forces its umask to `0` and stages the tree with `mkdirp`'s `0777`, so the source
+tree's own directory modes never reach the ipk there either.
+
+File modes are taken from the source tree and left alone.
+
 ## Examples
 
 ```sh
