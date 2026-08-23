@@ -252,9 +252,20 @@ PNG before believing it — the service reports success before it has finished
 writing, so reading too early gives a valid-looking prefix. Files are written
 to `<name>.part` and renamed, so nothing ever observes a half-written PNG.
 
-`--method` picks the plane: `DISPLAY` (default), `VIDEO`, or `GRAPHIC`. Under
-HDCP, `VIDEO` and often `DISPLAY` come back black, with the call reporting
-success. That is the platform, not the tool.
+`--method` picks the plane: `DISPLAY` (default), `VIDEO`, or `GRAPHIC`.
+
+`VIDEO` only works when there is video to capture. With no tuner signal the
+service refuses outright:
+
+```console
+$ ares-do -d tv screenshot --method VIDEO out.png
+Screen capture failed: neither capture service worked.
+  luna://com.webos.service.capture/executeOneShot: Service does not exist: com.webos.service.capture. (-1)
+  luna://com.webos.service.tv.capture/executeOneShot: Could not capture in no signal state (CAPTURE_ERROR_09)
+```
+
+Under HDCP it is worse than that: `VIDEO`, and often `DISPLAY`, come back
+black with the call reporting success. That is the platform, not the tool.
 
 Two services provide this and firmware has one or the other;
 `com.webos.service.capture` is tried first and `com.webos.service.tv.capture`

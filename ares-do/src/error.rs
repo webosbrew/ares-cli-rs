@@ -36,7 +36,8 @@ pub(crate) enum DoError {
     /// The service answered, and said no.
     LunaFailed {
         uri: String,
-        code: Option<i32>,
+        /// Rendered, not typed: services disagree on whether this is a number.
+        code: Option<String>,
         text: String,
     },
     /// The capture ran but produced nothing usable.

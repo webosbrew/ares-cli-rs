@@ -70,14 +70,30 @@ pub(crate) enum ShotTarget {
 ///
 /// `/tmp` is tmpfs on a TV and a 4K PNG is several megabytes, so leaking these
 /// across a long flow is a real way to fill the device up.
+///
+/// Registered *before* the capture is asked for, so no early return can skip
+/// it, and armed only once the service has accepted. A capture the service
+/// refused left no file behind, and warning that it could not be deleted
+/// points the reader at the wrong problem entirely.
 struct RemoteTemp<'a> {
     transfer: &'a Transfer<'a>,
     path: String,
     reporter: &'a Reporter,
+    armed: bool,
+}
+
+impl RemoteTemp<'_> {
+    /// The service accepted, so a file may now exist.
+    fn arm(&mut self) {
+        self.armed = true;
+    }
 }
 
 impl Drop for RemoteTemp<'_> {
     fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
         if let Err(e) = self.transfer.rm(&self.path) {
             // Cleanup failing is not worth losing the screenshot over, but it
             // is worth knowing about — the next one may fail for want of space.
@@ -232,13 +248,15 @@ impl Capturer {
             let path = remote_path(&self.remote_dir, self.seq);
             // Registered before the call, so a failure anywhere below still
             // takes the file with it.
-            let _temp = RemoteTemp {
+            let mut temp = RemoteTemp {
                 transfer,
                 path: path.clone(),
                 reporter,
+                armed: false,
             };
 
             let service = self.request_either(session, &path, reporter)?;
+            temp.arm();
             Self::wait_for_file(transfer, &path)?;
 
             let mut bytes = Vec::new();
