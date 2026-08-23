@@ -4,6 +4,8 @@
 //! when it is false. [`Luna::call`] only tells us the transport worked, so
 //! turning "the call happened" into "the call did what was asked" happens here.
 
+use std::fmt::{Display, Formatter};
+
 use ares_connection_lib::luna::{Luna, LunaError};
 use libssh_rs::Session;
 use serde::de::DeserializeOwned;
@@ -12,13 +14,35 @@ use serde::{Deserialize, Serialize};
 use crate::error::DoError;
 use crate::output::Reporter;
 
+/// An `errorCode`, which is not consistently a number.
+///
+/// `com.webos.service.tv.capture` answers a failed VIDEO capture with
+/// `"errorCode":"CAPTURE_ERROR_09"`. Typing this as `i32` turned that perfectly
+/// good error reply into "the reply was not JSON", which sent the reader
+/// looking in entirely the wrong place.
+#[derive(Deserialize, Debug)]
+#[serde(untagged)]
+pub(crate) enum ErrorCode {
+    Number(i64),
+    Text(String),
+}
+
+impl Display for ErrorCode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ErrorCode::Number(n) => write!(f, "{n}"),
+            ErrorCode::Text(s) => write!(f, "{s}"),
+        }
+    }
+}
+
 /// The part of a reply every service sends.
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct LunaReply {
     #[serde(default)]
     pub return_value: bool,
-    pub error_code: Option<i32>,
+    pub error_code: Option<ErrorCode>,
     pub error_text: Option<String>,
 }
 
@@ -30,7 +54,7 @@ impl LunaReply {
         }
         Err(DoError::LunaFailed {
             uri: uri.to_string(),
-            code: self.error_code,
+            code: self.error_code.as_ref().map(ToString::to_string),
             text: self
                 .error_text
                 .clone()
@@ -110,5 +134,46 @@ pub(crate) fn unavailable_hint(error: &LunaError) -> Option<&'static str> {
              user may not be allowed on the private bus",
         ),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LunaReply;
+
+    fn reply(json: &str) -> LunaReply {
+        serde_json::from_str(json).expect("should parse")
+    }
+
+    #[test]
+    fn a_numeric_error_code_parses() {
+        let r = reply(r#"{"returnValue":false,"errorCode":-1,"errorText":"nope"}"#);
+        let e = r.check("luna://x/y").unwrap_err().to_string();
+        assert!(e.contains("nope"), "{e}");
+        assert!(e.contains("(-1)"), "{e}");
+    }
+
+    #[test]
+    fn a_string_error_code_parses_too() {
+        // com.webos.service.tv.capture really does this. Typing errorCode as
+        // i32 turned a good error reply into "the reply was not JSON".
+        let r = reply(
+            r#"{"returnValue":false,"errorCode":"CAPTURE_ERROR_09",
+                "errorText":"Could not capture in no signal state"}"#,
+        );
+        let e = r.check("luna://x/y").unwrap_err().to_string();
+        assert!(e.contains("no signal state"), "{e}");
+        assert!(e.contains("CAPTURE_ERROR_09"), "{e}");
+    }
+
+    #[test]
+    fn a_positive_reply_is_not_an_error() {
+        assert!(reply(r#"{"returnValue":true}"#).check("luna://x/y").is_ok());
+    }
+
+    #[test]
+    fn a_reply_with_no_return_value_counts_as_failure() {
+        let e = reply("{}").check("luna://x/y").unwrap_err().to_string();
+        assert!(e.contains("no reason given"), "{e}");
     }
 }
