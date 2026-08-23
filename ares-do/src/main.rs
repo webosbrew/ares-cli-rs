@@ -19,7 +19,6 @@ use crate::run::Runner;
 mod app;
 mod cli;
 mod error;
-mod exec;
 mod flow;
 mod key;
 mod keycode;

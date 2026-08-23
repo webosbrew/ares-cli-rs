@@ -7,10 +7,10 @@
 
 use std::time::Duration;
 
+use ares_connection_lib::exec::Exec;
 use ares_connection_lib::session::{DeviceSession, SshConnection};
 
 use crate::error::DoError;
-use crate::exec;
 use crate::output::Reporter;
 
 pub(crate) trait Preflight {
@@ -31,8 +31,8 @@ pub(crate) trait Preflight {
 
 impl Preflight for DeviceSession {
     fn remote_uid(&self, timeout: Option<Duration>) -> Option<u32> {
-        let output = exec::run(&self.session, "id -u", timeout).ok()?;
-        if output.code != 0 {
+        let output = self.session.exec_timeout("id -u", timeout).ok()?;
+        if output.exit_code != 0 {
             return None;
         }
         output.stdout.trim().parse().ok()

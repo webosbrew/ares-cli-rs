@@ -1,66 +1,86 @@
-use std::io::{Error as IoError, ErrorKind, Read};
+use std::io::{Error as IoError, ErrorKind};
 
 use libssh_rs::{Error as SshError, Session};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Error as JsonError;
 
-use crate::luna::{Luna, LunaError, Subscription};
+use crate::exec::{Exec, ExecError};
+use crate::luna::{Luna, LunaError, LunaOptions, Subscription};
 use crate::session::SessionError;
 
 impl Luna for Session {
-    fn call<P, R>(&self, uri: &str, payload: P, public: bool) -> Result<R, LunaError>
+    fn call_with<P, R>(&self, uri: &str, payload: P, options: LunaOptions) -> Result<R, LunaError>
     where
         P: Sized + Serialize,
         R: DeserializeOwned,
     {
-        let ch = self.new_channel()?;
-        ch.open_session()?;
-        let luna_cmd = if public { "luna-send-pub" } else { "luna-send" };
-        let uri = snailquote::escape(uri.into());
         let payload_str = serde_json::to_string(&payload)?;
-        ch.request_exec(&format!(
-            "{luna_cmd} -n 1 {uri} {}",
+        let command = format!(
+            "{} -n 1 {} {}",
+            options.program(),
+            snailquote::escape(uri),
             snailquote::escape(&payload_str)
-        ))?;
-        let mut buf = String::new();
-        ch.stdout().read_to_string(&mut buf)?;
-        let mut stderr = String::new();
-        ch.stderr().read_to_string(&mut stderr)?;
-        let exit_code = ch.get_exit_status().unwrap_or(0);
-        ch.close()?;
-        if exit_code == 0 {
-            // Some builds print a warning before the reply, so take the last
-            // JSON-looking line rather than the whole of stdout.
-            let reply = buf
-                .lines()
-                .map(str::trim)
-                .filter(|l| !l.is_empty())
-                .next_back()
-                .unwrap_or("");
-            return Ok(serde_json::from_str(reply)?);
+        );
+
+        let output = self
+            .exec_timeout(&command, options.timeout)
+            .map_err(|e| match e {
+                ExecError::Timeout { after, .. } => LunaError::Timeout {
+                    uri: uri.to_string(),
+                    after,
+                },
+                ExecError::Ssh(e) => LunaError::Session(e.into()),
+            })?;
+
+        if !output.success() {
+            // Keep NotAvailable for the case it was always meant for: it
+            // failed and said nothing at all about why.
+            if output.complaint() == "no output" {
+                return Err(LunaError::NotAvailable);
+            }
+            return Err(LunaError::Command {
+                exit_code: output.exit_code,
+                stdout: output.stdout,
+                stderr: output.stderr,
+            });
         }
-        if stderr.trim().is_empty() && buf.trim().is_empty() {
-            return Err(LunaError::NotAvailable);
-        }
-        Err(LunaError::Command {
-            exit_code,
-            stdout: buf,
-            stderr,
+
+        // Some builds print a warning line before the reply, so take the last
+        // line that looks like one rather than all of stdout.
+        let reply = output
+            .stdout
+            .lines()
+            .map(str::trim)
+            .rfind(|l| l.starts_with('{'))
+            .unwrap_or("");
+
+        serde_json::from_str(reply).map_err(|e| LunaError::Reply {
+            said: if reply.is_empty() {
+                output.complaint().to_string()
+            } else {
+                reply.to_string()
+            },
+            why: e.to_string(),
         })
     }
 
-    fn subscribe<P>(&self, uri: &str, payload: P, public: bool) -> Result<Subscription, LunaError>
+    fn subscribe_with<P>(
+        &self,
+        uri: &str,
+        payload: P,
+        options: LunaOptions,
+    ) -> Result<Subscription, LunaError>
     where
         P: Sized + Serialize,
     {
         let ch = self.new_channel()?;
         ch.open_session()?;
-        let luna_cmd = if public { "luna-send-pub" } else { "luna-send" };
-        let uri = snailquote::escape(uri.into());
         let payload_str = serde_json::to_string(&payload)?;
         ch.request_exec(&format!(
-            "{luna_cmd} -i {uri} {}",
+            "{} -i {} {}",
+            options.program(),
+            snailquote::escape(uri),
             snailquote::escape(&payload_str)
         ))?;
         Ok(Subscription {

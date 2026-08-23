@@ -8,6 +8,7 @@
 use std::fmt::{Display, Formatter};
 use std::io::Error as IoError;
 
+use ares_connection_lib::luna::LunaError;
 use ares_connection_lib::session::SessionError;
 use ares_connection_lib::transfer::TransferError;
 
@@ -30,18 +31,9 @@ pub(crate) enum DoError {
         user: String,
         uid: Option<u32>,
     },
-    /// `luna-send` exited non-zero. Carries what it said.
-    LunaCommand {
-        uri: String,
-        code: i32,
-        said: String,
-    },
-    /// `luna-send` succeeded but what came back was not a reply.
-    LunaReply {
-        uri: String,
-        said: String,
-        why: String,
-    },
+    /// The call itself failed: no such service, no permission, no reply in
+    /// time. [`LunaError`] says which.
+    Luna { uri: String, source: LunaError },
     /// The service answered, and said no.
     LunaFailed {
         uri: String,
@@ -63,9 +55,23 @@ pub(crate) enum DoError {
     Usage(String),
     /// `exec` ran a command and it failed. Carries the command's own status.
     RemoteCommand { command: String, code: i32 },
+    /// `exec` could not run the command at all, or it never finished.
+    Exec(String),
 }
 
 impl DoError {
+    /// A call that never answered is a timeout first and a luna problem
+    /// second, because a caller retries the two differently.
+    fn timed_out(&self) -> bool {
+        matches!(
+            self,
+            DoError::Luna {
+                source: LunaError::Timeout { .. },
+                ..
+            }
+        )
+    }
+
     /// The process exit code. Documented in the README; keep the two in step.
     pub(crate) fn exit_code(&self) -> i32 {
         match self {
@@ -73,10 +79,11 @@ impl DoError {
             DoError::DeviceNotFound { .. } | DoError::DeviceLookup(_) => 3,
             DoError::Connect { .. } => 4,
             DoError::NotRoot { .. } => 5,
-            DoError::LunaCommand { .. } | DoError::LunaReply { .. } => 6,
+            DoError::Luna { .. } if self.timed_out() => 9,
+            DoError::Luna { .. } => 6,
             DoError::LunaFailed { .. } => 7,
             DoError::Io(_) | DoError::Transfer(_) => 8,
-            DoError::Capture(_) | DoError::Timeout(_) => 9,
+            DoError::Capture(_) | DoError::Timeout(_) | DoError::Exec(_) => 9,
             // Forwarded, not from this table — see the README.
             DoError::RemoteCommand { code, .. } => *code,
         }
@@ -91,11 +98,13 @@ impl DoError {
             DoError::DeviceLookup(_) | DoError::DeviceNotFound { .. } => "device_not_found",
             DoError::Connect { .. } => "connect_failed",
             DoError::NotRoot { .. } => "not_root",
-            DoError::LunaCommand { .. } | DoError::LunaReply { .. } => "luna_unavailable",
+            DoError::Luna { .. } if self.timed_out() => "timeout",
+            DoError::Luna { .. } => "luna_unavailable",
             DoError::LunaFailed { .. } => "luna_failed",
             DoError::Transfer(_) | DoError::Io(_) => "io",
             DoError::Capture(_) => "capture_failed",
             DoError::Timeout(_) => "timeout",
+            DoError::Exec(_) => "exec_failed",
             DoError::RemoteCommand { .. } => "remote_command",
         }
     }
@@ -130,13 +139,16 @@ impl Display for DoError {
                      Pass --allow-non-root to try anyway."
                 )
             }
-            DoError::LunaCommand { uri, code, said } => write!(
-                f,
-                "luna-send exited {code} calling {uri}: {said}\n  \
-                 The service may be missing, or this user may not be allowed on the private bus."
-            ),
-            DoError::LunaReply { uri, said, why } => {
-                write!(f, "{uri} did not answer with a reply ({why}): {said}")
+            DoError::Luna { uri, source } => {
+                write!(f, "Could not call {uri}: {source}")?;
+                if matches!(source, LunaError::NotAvailable | LunaError::Command { .. }) {
+                    write!(
+                        f,
+                        "\n  The service may be missing, or this user may not be allowed on \
+                         the private bus."
+                    )?;
+                }
+                Ok(())
             }
             DoError::LunaFailed { uri, code, text } => {
                 write!(f, "{uri} refused the call: {text}")?;
@@ -149,7 +161,7 @@ impl Display for DoError {
             DoError::Transfer(e) => write!(f, "File transfer failed: {e}"),
             DoError::Io(e) => write!(f, "{e}"),
             DoError::Timeout(what) => write!(f, "Timed out waiting for {what}"),
-            DoError::Usage(message) => write!(f, "{message}"),
+            DoError::Usage(message) | DoError::Exec(message) => write!(f, "{message}"),
             DoError::RemoteCommand { command, code } => {
                 write!(f, "`{command}` exited {code} on the device")
             }

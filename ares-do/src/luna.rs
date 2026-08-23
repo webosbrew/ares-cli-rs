@@ -1,18 +1,18 @@
-//! One place that knows how a luna reply is shaped.
+//! What a luna reply means to `ares-do`.
 //!
-//! Every service answers with `returnValue`, and adds `errorText`/`errorCode`
-//! when it is false. [`Luna::call`] only tells us the transport worked, so
-//! turning "the call happened" into "the call did what was asked" happens here.
+//! The call itself belongs to `ares-connection-lib`; this is only the layer
+//! above it — every service answers with `returnValue`, and turning "the call
+//! happened" into "the call did what was asked" happens here.
 
 use std::fmt::{Display, Formatter};
 use std::time::Duration;
 
+use ares_connection_lib::luna::{Luna, LunaOptions};
 use libssh_rs::Session;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::error::DoError;
-use crate::exec;
 use crate::output::Reporter;
 
 /// An `errorCode`, which is not consistently a number.
@@ -49,6 +49,10 @@ pub(crate) struct LunaReply {
 
 impl LunaReply {
     /// Turn a negative reply into the error it describes.
+    ///
+    /// # Errors
+    ///
+    /// [`DoError::LunaFailed`] when `returnValue` is false.
     pub(crate) fn check(&self, uri: &str) -> Result<(), DoError> {
         if self.return_value {
             return Ok(());
@@ -64,16 +68,62 @@ impl LunaReply {
     }
 }
 
-/// Call a private-bus method and insist it succeeded.
-///
-/// Everything `ares-do` drives is on the private bus, so `public` is never a
-/// parameter here — passing `true` by accident would silently switch to
-/// `luna-send-pub` and fail differently.
+/// Everything `ares-do` drives is on the private bus, so that is the default
+/// here rather than a parameter every caller has to remember.
+pub(crate) fn options(public: bool, timeout: Option<Duration>) -> LunaOptions {
+    LunaOptions::private().public(public).timeout(timeout)
+}
+
+/// Call a private-bus method and hand back the whole reply.
 ///
 /// # Errors
 ///
-/// [`DoError::LunaUnavailable`] when `luna-send` itself failed, and
-/// [`DoError::LunaFailed`] when the service answered with `returnValue: false`.
+/// Whatever the call failed with. A negative reply is *not* an error here —
+/// the caller decides what it means.
+pub(crate) fn raw<P: Serialize, R: DeserializeOwned>(
+    session: &Session,
+    uri: &str,
+    payload: &P,
+    timeout: Option<Duration>,
+    reporter: &Reporter,
+) -> Result<R, DoError> {
+    with(session, uri, payload, options(false, timeout), reporter)
+}
+
+/// Call with the options spelled out, for the `luna` subcommand.
+///
+/// # Errors
+///
+/// Whatever the call failed with.
+pub(crate) fn with<P: Serialize, R: DeserializeOwned>(
+    session: &Session,
+    uri: &str,
+    payload: &P,
+    options: LunaOptions,
+    reporter: &Reporter,
+) -> Result<R, DoError> {
+    if let Ok(rendered) = serde_json::to_string(payload) {
+        let program = if options.public {
+            "luna-send-pub"
+        } else {
+            "luna-send"
+        };
+        reporter.trace(&format!("{program} -n 1 {uri} {rendered}"));
+    }
+    session
+        .call_with(uri, payload, options)
+        .map_err(|source| DoError::Luna {
+            uri: uri.to_string(),
+            source,
+        })
+}
+
+/// Call a private-bus method and insist it succeeded.
+///
+/// # Errors
+///
+/// Whatever the call failed with, or [`DoError::LunaFailed`] when the service
+/// answered `returnValue: false`.
 pub(crate) fn call<P: Serialize>(
     session: &Session,
     uri: &str,
@@ -85,90 +135,6 @@ pub(crate) fn call<P: Serialize>(
     reply.check(uri)
 }
 
-/// Call a private-bus method and hand back the whole reply.
-///
-/// # Errors
-///
-/// [`DoError::LunaUnavailable`] when `luna-send` itself failed. A negative
-/// reply is *not* an error here — the caller decides what it means.
-pub(crate) fn raw_pub<P: Serialize, R: DeserializeOwned>(
-    session: &Session,
-    uri: &str,
-    payload: &P,
-    timeout: Option<Duration>,
-    reporter: &Reporter,
-) -> Result<R, DoError> {
-    send(session, "luna-send-pub", uri, payload, timeout, reporter)
-}
-
-/// Private bus, which is where everything `ares-do` drives lives.
-///
-/// # Errors
-///
-/// See [`send`].
-pub(crate) fn raw<P: Serialize, R: DeserializeOwned>(
-    session: &Session,
-    uri: &str,
-    payload: &P,
-    timeout: Option<Duration>,
-    reporter: &Reporter,
-) -> Result<R, DoError> {
-    send(session, "luna-send", uri, payload, timeout, reporter)
-}
-
-/// Run one `luna-send` and parse what comes back.
-///
-/// # Errors
-///
-/// [`DoError::LunaCommand`] when `luna-send` exits non-zero,
-/// [`DoError::LunaReply`] when what it printed is not a reply, and
-/// [`DoError::Timeout`] when it never finished.
-fn send<P: Serialize, R: DeserializeOwned>(
-    session: &Session,
-    program: &str,
-    uri: &str,
-    payload: &P,
-    timeout: Option<Duration>,
-    reporter: &Reporter,
-) -> Result<R, DoError> {
-    let rendered = serde_json::to_string(payload)
-        .map_err(|e| DoError::Usage(format!("payload could not be serialised: {e}")))?;
-    // Escaped exactly as ares-connection-lib does, so the two build the same
-    // command line for the same call.
-    let command = format!(
-        "{program} -n 1 {} {}",
-        snailquote::escape(uri),
-        snailquote::escape(&rendered)
-    );
-    reporter.trace(&command);
-
-    let output = exec::run(session, &command, timeout)?;
-    if output.code != 0 {
-        return Err(DoError::LunaCommand {
-            uri: uri.to_string(),
-            code: output.code,
-            said: output.complaint().to_string(),
-        });
-    }
-    // Some builds print a warning before the reply, so take the last line that
-    // looks like one rather than all of stdout.
-    let reply = output
-        .stdout
-        .lines()
-        .map(str::trim)
-        .rfind(|l| l.starts_with('{'))
-        .unwrap_or("");
-    serde_json::from_str(reply).map_err(|e| DoError::LunaReply {
-        uri: uri.to_string(),
-        said: if reply.is_empty() {
-            output.complaint().to_string()
-        } else {
-            reply.to_string()
-        },
-        why: e.to_string(),
-    })
-}
-
 /// True when a failure means "try the other service", rather than "give up".
 ///
 /// Deliberately broad: whether a missing service shows up as a non-zero exit,
@@ -177,10 +143,13 @@ fn send<P: Serialize, R: DeserializeOwned>(
 /// A timeout is excluded — waiting again for something that already hung is
 /// just waiting twice.
 pub(crate) fn is_worth_retrying_elsewhere(error: &DoError) -> bool {
-    matches!(
-        error,
-        DoError::LunaFailed { .. } | DoError::LunaCommand { .. } | DoError::LunaReply { .. }
-    )
+    match error {
+        DoError::LunaFailed { .. } => true,
+        DoError::Luna { source, .. } => {
+            !matches!(source, ares_connection_lib::luna::LunaError::Timeout { .. })
+        }
+        _ => false,
+    }
 }
 
 #[cfg(test)]

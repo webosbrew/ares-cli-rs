@@ -114,6 +114,11 @@ Every command sent to the device is bounded, because the failure that cannot be
 recovered from unattended is the one that never returns — a command that does
 not exit, or a luna method that subscribes instead of replying.
 
+The bound lives in `ares-connection-lib`, not here: `Luna::call_with` takes a
+`LunaOptions` carrying the bus and the timeout, and both it and
+`Exec::exec_timeout` read stdout and stderr together against a deadline. Every
+tool in this repo inherits it, and `ares-do` is a plain caller.
+
 `--timeout` (30s by default) applies to each device command separately, not to
 the run as a whole, so a long flow is not on a budget. `--timeout 0` waits
 forever.
