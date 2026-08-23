@@ -45,10 +45,6 @@ impl Reporter {
         self.json
     }
 
-    pub(crate) fn is_verbose(&self) -> bool {
-        self.verbose > 0
-    }
-
     /// One machine-readable event, one line, flushed.
     ///
     /// Flushing per line is what lets a caller react to step 3 while step 4 is

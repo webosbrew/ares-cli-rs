@@ -25,6 +25,8 @@ Commands:
   wait        Do nothing for a while [aliases: sleep]
   launch      Launch an app
   close       Close a running app
+  luna        Make one luna call and print the reply
+  exec        Run one command on the device [aliases: sh]
   echo        Print a message, to annotate a flow
   run         Replay a flow file, or `-` for stdin
   keys        List the key names this tool accepts
@@ -36,6 +38,7 @@ Options:
   -v, --verbose...       Print every luna call before it is sent
       --dry-run          Resolve everything and print it, without touching the device
       --allow-non-root   Run even when the session is not root
+      --timeout <MS>     Give up on a device command after this long. 0 waits forever [default: 30s]
   -h, --help             Print help
   -V, --version          Print version
 ```
@@ -66,7 +69,64 @@ ares-do -d tv screenshot --method GRAPHIC ui.png
 
 ares-do keys                            # the buttons a remote has
 ares-do keys volume --json              # filtered, machine-readable
+
+ares-do -d tv launch com.example.app
+ares-do -d tv launch com.example.app -p url=https://webosbrew.org
+ares-do -d tv luna luna://com.webos.applicationManager/dev/running
+ares-do -d tv exec 'cat /var/run/nyx/device_info.json'
 ```
+
+## Apps, luna calls and commands
+
+`launch` and `close` take `-p` the same way `ares-launch` does — `key=value`
+or a whole `{"json":"object"}`, repeatable and merged:
+
+```sh
+ares-do -d tv launch com.example.app -p url=https://webosbrew.org -p '{"mode":"kiosk"}'
+```
+
+Unlike `ares-launch`, a parameter that is neither shape is an error rather than
+a warning. A launch that quietly dropped half its parameters is worse than one
+that did not happen.
+
+`luna` makes one call and puts the reply on stdout, so it composes:
+
+```console
+$ ares-do -d tv luna luna://com.webos.applicationManager/dev/running | jq '.running | length'
+3
+```
+
+It uses the private bus, like everything else here; `--public` switches to
+`luna-send-pub`. A `returnValue: false` reply is printed *and* exits 7, so a
+`luna` line works as an assertion inside a flow. `--allow-false` prints the
+reply and succeeds regardless, which is what you want when probing whether a
+service exists at all.
+
+`exec` runs one command and **exits with the command's own status**, so
+`exec 'test -f /var/log/x'` asserts the way you would expect. This is the one
+place `ares-do` does not use its own exit-code table — the same choice
+`ares-shell` makes, for the same reason. Under `--json` the status is also in
+the `exitCode` field, which removes the ambiguity.
+
+## Timeouts
+
+Every command sent to the device is bounded, because the failure that cannot be
+recovered from unattended is the one that never returns — a command that does
+not exit, or a luna method that subscribes instead of replying.
+
+`--timeout` (30s by default) applies to each device command separately, not to
+the run as a whole, so a long flow is not on a budget. `--timeout 0` waits
+forever.
+
+```console
+$ ares-do -d tv --timeout 3s exec 'sleep 300'
+Timed out waiting for `sleep 300` to finish
+$ echo $?
+9
+```
+
+Raise it for a slow capture on a 4K panel, or for an app that takes its time
+starting.
 
 ## Key names
 
@@ -218,14 +278,21 @@ luna://com.webos.service.networkinput/test/sendKeyCode {"keyCode":15}   # TAB (1
 | 7    | the device answered `returnValue: false`                     |
 | 8    | host I/O error                                               |
 | 9    | capture failed, or timed out waiting for the device          |
+| *n*  | `exec` only: the remote command's own exit status            |
 | 101  | panic — a bug, please report it                              |
 | 130  | interrupted                                                  |
 
 `run` exits with the failing step's own code, so the same branch works whether
 you ran one command or a flow. Codes 10-19 are reserved.
 
-Note this differs from `ares-shell`, which uses 255 for local errors because it
-forwards the remote command's status. `ares-do` never forwards one.
+`exec` is the exception: it forwards the remote command's status, so a remote
+command exiting 5 is indistinguishable from "not root" by exit code alone. Use
+`--json` if that matters — `exitCode` and `kind` separate them. Every other
+command sticks to the table.
+
+Note `ares-shell` uses 255 for its own local errors for the same reason.
+`ares-do` reports local errors from the table above, because they all happen
+before any remote command runs.
 
 ## Timing
 

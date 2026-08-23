@@ -11,13 +11,14 @@
 //! it properly. Since `ares-do` already requires root for everything else,
 //! these use the private bus too.
 
-use ares_connection_lib::luna::Luna;
+use std::time::Duration;
+
 use libssh_rs::Session;
 use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::error::DoError;
-use crate::luna::LunaReply;
+use crate::luna::{self, LunaReply};
 use crate::output::{Reporter, Timer};
 
 const LAUNCH_URI: &str = "luna://com.webos.applicationManager/launch";
@@ -33,14 +34,14 @@ struct AppParams {
 }
 
 /// An `applicationManager` call, on the private bus for the reason above.
-fn call_app(session: &Session, uri: &str, payload: &AppParams) -> Result<(), DoError> {
-    let reply: LunaReply =
-        session
-            .call(uri, payload, false)
-            .map_err(|source| DoError::LunaUnavailable {
-                uri: uri.to_string(),
-                source,
-            })?;
+fn call_app(
+    session: &Session,
+    uri: &str,
+    payload: &AppParams,
+    timeout: Option<Duration>,
+    reporter: &Reporter,
+) -> Result<(), DoError> {
+    let reply: LunaReply = luna::raw(session, uri, payload, timeout, reporter)?;
     reply.check(uri)
 }
 
@@ -48,22 +49,40 @@ pub(crate) trait AppControl {
     /// # Errors
     ///
     /// Whatever `applicationManager` said.
-    fn launch_app(&self, id: &str, reporter: &Reporter) -> Result<(), DoError>;
+    fn launch_app(
+        &self,
+        id: &str,
+        params: Value,
+        timeout: Option<Duration>,
+        reporter: &Reporter,
+    ) -> Result<(), DoError>;
 
     /// # Errors
     ///
     /// Whatever `applicationManager` said.
-    fn close_app(&self, id: &str, reporter: &Reporter) -> Result<(), DoError>;
+    fn close_app(
+        &self,
+        id: &str,
+        params: Value,
+        timeout: Option<Duration>,
+        reporter: &Reporter,
+    ) -> Result<(), DoError>;
 
     /// Which app currently owns the screen, for context on a screenshot.
     ///
     /// Best effort: a failure here is never worth failing a capture over, so
     /// it answers `None` rather than erroring.
-    fn foreground_app(&self) -> Option<String>;
+    fn foreground_app(&self, timeout: Option<Duration>, reporter: &Reporter) -> Option<String>;
 }
 
 impl AppControl for Session {
-    fn launch_app(&self, id: &str, reporter: &Reporter) -> Result<(), DoError> {
+    fn launch_app(
+        &self,
+        id: &str,
+        params: Value,
+        timeout: Option<Duration>,
+        reporter: &Reporter,
+    ) -> Result<(), DoError> {
         let timer = Timer::start();
         call_app(
             self,
@@ -71,17 +90,26 @@ impl AppControl for Session {
             &AppParams {
                 id: id.to_string(),
                 subscribe: false,
-                params: Value::Null,
+                params: params.clone(),
             },
+            timeout,
+            reporter,
         )?;
         reporter.info(&format!("Launched {id}"));
         reporter.event(&json!({
-            "event": "launch", "ok": true, "appId": id, "ms": timer.ms(),
+            "event": "launch", "ok": true, "appId": id,
+            "params": params, "ms": timer.ms(),
         }));
         Ok(())
     }
 
-    fn close_app(&self, id: &str, reporter: &Reporter) -> Result<(), DoError> {
+    fn close_app(
+        &self,
+        id: &str,
+        params: Value,
+        timeout: Option<Duration>,
+        reporter: &Reporter,
+    ) -> Result<(), DoError> {
         let timer = Timer::start();
         call_app(
             self,
@@ -89,8 +117,10 @@ impl AppControl for Session {
             &AppParams {
                 id: id.to_string(),
                 subscribe: false,
-                params: Value::Null,
+                params,
             },
+            timeout,
+            reporter,
         )?;
         reporter.info(&format!("Closed {id}"));
         reporter.event(&json!({
@@ -99,8 +129,8 @@ impl AppControl for Session {
         Ok(())
     }
 
-    fn foreground_app(&self) -> Option<String> {
-        let reply: Value = self.call(FOREGROUND_URI, json!({}), false).ok()?;
+    fn foreground_app(&self, timeout: Option<Duration>, reporter: &Reporter) -> Option<String> {
+        let reply: Value = luna::raw(self, FOREGROUND_URI, &json!({}), timeout, reporter).ok()?;
         reply
             .get("appId")
             .and_then(Value::as_str)

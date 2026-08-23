@@ -15,23 +15,26 @@ use ares_connection_lib::session::DeviceSession;
 use ares_connection_lib::transfer::Transfer;
 use clap::Parser;
 use clap::error::ErrorKind;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::app::AppControl;
-use crate::cli::{Cli, Command, FlowLine, RunArgs, ShotArgs};
+use crate::cli::{self, Cli, Command, ExecArgs, FlowLine, LunaArgs, RunArgs, ShotArgs};
 use crate::error::DoError;
 use crate::flow::{self, FlowError, Step};
 use crate::key::SendKey;
-use crate::keycode;
+use crate::luna::{self, LunaReply};
 use crate::output::{Reporter, Timer};
 use crate::screenshot::{Capturer, ShotTarget, write_shot};
 use crate::text::TypeText;
+use crate::{exec, keycode};
 
 /// Everything a step needs that does not come from the step itself.
 pub(crate) struct Runner<'a> {
     session: &'a DeviceSession,
     transfer: Transfer<'a>,
     reporter: &'a Reporter,
+    /// Bounds every command sent to the device. `None` waits forever.
+    timeout: Option<Duration>,
     /// Set only while running a flow; a one-shot command has no output dir.
     flow: Option<FlowContext>,
 }
@@ -44,11 +47,16 @@ struct FlowContext {
 }
 
 impl<'a> Runner<'a> {
-    pub(crate) fn new(session: &'a DeviceSession, reporter: &'a Reporter) -> Self {
+    pub(crate) fn new(
+        session: &'a DeviceSession,
+        timeout: Option<Duration>,
+        reporter: &'a Reporter,
+    ) -> Self {
         Runner {
             session,
             transfer: Transfer::open(session),
             reporter,
+            timeout,
             flow: None,
         }
     }
@@ -63,14 +71,17 @@ impl<'a> Runner<'a> {
             Command::Key(args) => {
                 for _ in 0..args.repeat.max(1) {
                     self.session
-                        .send_keys(&args.keys, args.delay, self.reporter)?;
+                        .send_keys(&args.keys, args.delay, self.timeout, self.reporter)?;
                 }
                 Ok(())
             }
-            Command::Text(args) => {
-                self.session
-                    .type_text(&args.text, args.lower, args.delay, self.reporter)
-            }
+            Command::Text(args) => self.session.type_text(
+                &args.text,
+                args.lower,
+                args.delay,
+                self.timeout,
+                self.reporter,
+            ),
             Command::Screenshot(args) => self.screenshot(args),
             Command::Wait(args) => {
                 let timer = Timer::start();
@@ -80,8 +91,18 @@ impl<'a> Runner<'a> {
                 }));
                 Ok(())
             }
-            Command::Launch(args) => self.session.launch_app(&args.app_id, self.reporter),
-            Command::Close(args) => self.session.close_app(&args.app_id, self.reporter),
+            Command::Launch(args) => {
+                let params = cli::parse_params(&args.params).map_err(DoError::Usage)?;
+                self.session
+                    .launch_app(&args.app_id, params, self.timeout, self.reporter)
+            }
+            Command::Close(args) => {
+                let params = cli::parse_params(&args.params).map_err(DoError::Usage)?;
+                self.session
+                    .close_app(&args.app_id, params, self.timeout, self.reporter)
+            }
+            Command::Luna(args) => self.luna(args),
+            Command::Exec(args) => self.exec(args),
             Command::Echo(args) => {
                 self.reporter.info(&args.message);
                 self.reporter.event(&json!({
@@ -92,6 +113,79 @@ impl<'a> Runner<'a> {
             Command::Run(args) => self.flow(args),
             // Handled before a device is ever opened.
             Command::Keys(_) => Ok(()),
+        }
+    }
+
+    /// One luna call, with the reply on stdout.
+    ///
+    /// stdout gets the reply verbatim, because the reply is the data — that is
+    /// what makes `ares-do luna ... | jq .returnValue` work.
+    fn luna(&mut self, args: &LunaArgs) -> Result<(), DoError> {
+        let payload: Value = serde_json::from_str(&args.payload)
+            .map_err(|e| DoError::Usage(format!("payload is not JSON: {e}")))?;
+        let timer = Timer::start();
+
+        let reply: Value = if args.public {
+            luna::raw_pub(
+                &self.session.session,
+                &args.uri,
+                &payload,
+                self.timeout,
+                self.reporter,
+            )?
+        } else {
+            luna::raw(
+                &self.session.session,
+                &args.uri,
+                &payload,
+                self.timeout,
+                self.reporter,
+            )?
+        };
+
+        if self.reporter.is_json() {
+            self.reporter.event(&json!({
+                "event": "luna", "ok": true, "uri": args.uri,
+                "reply": reply, "ms": timer.ms(),
+            }));
+        } else {
+            println!("{reply}");
+        }
+
+        // A negative reply fails by default, so `luna` works as an assertion
+        // in a flow without a wrapper around it.
+        if !args.allow_false {
+            let typed: LunaReply = serde_json::from_value(reply)
+                .map_err(|e| DoError::Capture(format!("reply had an odd shape: {e}")))?;
+            typed.check(&args.uri)?;
+        }
+        Ok(())
+    }
+
+    /// One command on the device.
+    ///
+    /// Exits with the command's own status, the way `ares-shell` does — see
+    /// the README, this is the one place `ares-do` does not use its own table.
+    fn exec(&mut self, args: &ExecArgs) -> Result<(), DoError> {
+        let timer = Timer::start();
+        let output = exec::run(&self.session.session, &args.command, self.timeout)?;
+
+        if self.reporter.is_json() {
+            self.reporter.event(&json!({
+                "event": "exec", "ok": output.code == 0, "command": args.command,
+                "exitCode": output.code, "stdout": output.stdout, "ms": timer.ms(),
+            }));
+        } else {
+            print!("{}", output.stdout);
+        }
+
+        if output.code == 0 {
+            Ok(())
+        } else {
+            Err(DoError::RemoteCommand {
+                command: args.command.clone(),
+                code: output.code,
+            })
         }
     }
 
@@ -106,7 +200,12 @@ impl<'a> Runner<'a> {
         }
 
         let timer = Timer::start();
-        let mut capturer = Capturer::new(args.method, args.remote_dir.clone(), args.retries);
+        let mut capturer = Capturer::new(
+            args.method,
+            args.remote_dir.clone(),
+            args.retries,
+            self.timeout,
+        );
         let shot = capturer.capture(self.session, &self.transfer, self.reporter)?;
         write_shot(&target, &shot.bytes)?;
 
@@ -123,7 +222,7 @@ impl<'a> Runner<'a> {
             "bytes": shot.bytes.len(),
             "method": shot.method.to_string(),
             "service": shot.service,
-            "foregroundAppId": self.session.foreground_app(),
+            "foregroundAppId": self.session.foreground_app(self.timeout, self.reporter),
             "ms": timer.ms(),
         }));
         Ok(())
@@ -397,8 +496,24 @@ pub(crate) fn dry_run(cli: &Cli, reporter: &Reporter) -> Result<(), DoError> {
                 lines.push(format!("capture {} -> {where_to}", args.method));
             }
             Command::Wait(args) => lines.push(format!("sleep {}ms", args.time.as_millis())),
-            Command::Launch(args) => lines.push(format!("launch {}", args.app_id)),
-            Command::Close(args) => lines.push(format!("close {}", args.app_id)),
+            Command::Launch(args) | Command::Close(args) => {
+                let params = cli::parse_params(&args.params).map_err(DoError::Usage)?;
+                let verb = command.name();
+                if params.is_null() {
+                    lines.push(format!("{verb} {}", args.app_id));
+                } else {
+                    lines.push(format!("{verb} {} {params}", args.app_id));
+                }
+            }
+            Command::Luna(args) => {
+                let bus = if args.public {
+                    "luna-send-pub"
+                } else {
+                    "luna-send"
+                };
+                lines.push(format!("{bus} -n 1 {} {}", args.uri, args.payload));
+            }
+            Command::Exec(args) => lines.push(format!("exec {}", args.command)),
             Command::Echo(args) => lines.push(format!("echo {}", args.message)),
             Command::Run(_) | Command::Keys(_) => {}
         }
@@ -452,10 +567,13 @@ pub(crate) fn list_keys(pattern: Option<&str>, all: bool, reporter: &Reporter) {
 /// `Drop` does not run on Ctrl-C, so a previous run's temp file can outlive
 /// it. Cleaning at the start rather than trapping a signal keeps this
 /// dependency-free.
-pub(crate) fn sweep_leftovers(session: &DeviceSession, reporter: &Reporter) {
-    use crate::exec::Exec;
+pub(crate) fn sweep_leftovers(
+    session: &DeviceSession,
+    timeout: Option<Duration>,
+    reporter: &Reporter,
+) {
     let pattern = format!("/tmp/ares-do-{}-*.png", std::process::id());
-    if let Ok(output) = session.session.exec(&format!("rm -f {pattern}"))
+    if let Ok(output) = exec::run(&session.session, &format!("rm -f {pattern}"), timeout)
         && output.code != 0
     {
         reporter.trace(&format!("could not sweep {pattern}"));

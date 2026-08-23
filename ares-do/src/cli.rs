@@ -8,6 +8,7 @@
 use std::time::Duration;
 
 use clap::{ArgAction, Parser, Subcommand};
+use serde_json::{Map, Value, json};
 
 use crate::keycode::{self, Key};
 use crate::screenshot::CaptureMethod;
@@ -20,6 +21,9 @@ Examples:
   ares-do screenshot shot.png          save a screenshot
   ares-do screenshot > shot.png        or send the PNG to stdout
   ares-do keys                         list the buttons a remote has
+  ares-do launch com.example.app -p url=http://x
+  ares-do luna luna://com.webos.service.tv.power/getPowerState
+  ares-do exec 'cat /var/run/nyx/device_info.json'
   ares-do run flow.txt --out ./frames  replay a flow, saving every shot
 
 A flow file is one command per line, in exactly the syntax above.
@@ -70,6 +74,16 @@ pub(crate) struct Cli {
     #[arg(long, global = true, help = "Run even when the session is not root")]
     pub allow_non_root: bool,
 
+    #[arg(
+        long,
+        global = true,
+        value_name = "MS",
+        default_value = "30s",
+        value_parser = parse_duration,
+        help = "Give up on a device command after this long. 0 waits forever"
+    )]
+    pub timeout: Duration,
+
     #[command(subcommand)]
     pub command: Command,
 }
@@ -98,6 +112,11 @@ pub(crate) enum Command {
     Launch(AppArgs),
     /// Close a running app
     Close(AppArgs),
+    /// Make one luna call and print the reply
+    Luna(LunaArgs),
+    /// Run one command on the device
+    #[command(alias = "sh")]
+    Exec(ExecArgs),
     /// Print a message, to annotate a flow
     Echo(EchoArgs),
     /// Replay a flow file, or `-` for stdin
@@ -116,6 +135,8 @@ impl Command {
             Command::Wait(_) => "wait",
             Command::Launch(_) => "launch",
             Command::Close(_) => "close",
+            Command::Luna(_) => "luna",
+            Command::Exec(_) => "exec",
             Command::Echo(_) => "echo",
             Command::Run(_) => "run",
             Command::Keys(_) => "keys",
@@ -228,6 +249,45 @@ pub(crate) struct WaitArgs {
 pub(crate) struct AppArgs {
     #[arg(value_name = "APP_ID", help = "An app id from appinfo.json")]
     pub app_id: String,
+
+    #[arg(
+        short,
+        long,
+        value_name = "PARAMS",
+        help = "Launch parameters: key=value, or a {\"json\":\"object\"}. Repeatable"
+    )]
+    pub params: Vec<String>,
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub(crate) struct LunaArgs {
+    #[arg(value_name = "URI", help = "A luna:// URI")]
+    pub uri: String,
+
+    #[arg(
+        value_name = "PAYLOAD",
+        default_value = "{}",
+        help = "The JSON payload to send"
+    )]
+    pub payload: String,
+
+    #[arg(
+        long,
+        help = "Use luna-send-pub. ares-do uses the private bus by default"
+    )]
+    pub public: bool,
+
+    #[arg(
+        long,
+        help = "Print the reply and succeed even when returnValue is false"
+    )]
+    pub allow_false: bool,
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub(crate) struct ExecArgs {
+    #[arg(value_name = "COMMAND", help = "A shell command to run on the device")]
+    pub command: String,
 }
 
 #[derive(clap::Args, Debug, Clone)]
@@ -279,6 +339,40 @@ pub(crate) struct KeysArgs {
     pub all: bool,
 }
 
+/// Merge `-p` arguments into one object.
+///
+/// Same two shapes `ares-launch` accepts — `key=value` and a whole `{...}`
+/// object, repeatable and merged — so the two tools take the same input.
+/// Unlike `ares-launch`, a param that makes no sense is an error rather than a
+/// warning: a launch that quietly dropped half its parameters is worse than
+/// one that did not happen.
+///
+/// # Errors
+///
+/// A string that is neither shape, or JSON that is not an object.
+pub(crate) fn parse_params(params: &[String]) -> Result<Value, String> {
+    if params.is_empty() {
+        return Ok(Value::Null);
+    }
+    let mut map = Map::new();
+    for p in params {
+        if p.starts_with('{') {
+            let value: Value = serde_json::from_str(p).map_err(|e| format!("{p}: {e}"))?;
+            let Value::Object(object) = value else {
+                return Err(format!("{p}: expected a JSON object"));
+            };
+            map.extend(object);
+        } else if let Some((key, value)) = p.split_once('=') {
+            map.insert(key.to_string(), json!(value));
+        } else {
+            return Err(format!(
+                "{p}: expected key=value or a JSON object starting with {{"
+            ));
+        }
+    }
+    Ok(Value::Object(map))
+}
+
 /// `500` and `500ms` are milliseconds; `1.5s` is seconds.
 ///
 /// Bare numbers mean milliseconds because that is what `adb` and `xdotool`
@@ -309,7 +403,7 @@ mod tests {
 
     use clap::Parser;
 
-    use super::{Cli, FlowLine, parse_duration};
+    use super::{Cli, Command, FlowLine, parse_duration, parse_params};
 
     #[test]
     fn a_bare_number_is_milliseconds() {
@@ -386,6 +480,66 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(error.contains("unknown key"), "{error}");
+    }
+
+    #[test]
+    fn params_take_both_shapes_and_merge() {
+        let v = parse_params(&[
+            String::from("a=1"),
+            String::from(r#"{"b":2}"#),
+            String::from("c=hello world"),
+        ])
+        .unwrap();
+        assert_eq!(v["a"], "1");
+        assert_eq!(v["b"], 2);
+        assert_eq!(v["c"], "hello world");
+    }
+
+    #[test]
+    fn no_params_means_no_params_object() {
+        assert!(parse_params(&[]).unwrap().is_null());
+    }
+
+    #[test]
+    fn a_value_may_contain_an_equals_sign() {
+        let v = parse_params(&[String::from("url=http://x/?a=b")]).unwrap();
+        assert_eq!(v["url"], "http://x/?a=b");
+    }
+
+    #[test]
+    fn a_param_that_makes_no_sense_is_refused_not_dropped() {
+        // ares-launch warns and carries on. A launch missing half its
+        // parameters is worse than one that did not happen.
+        assert!(parse_params(&[String::from("bare")]).is_err());
+        assert!(parse_params(&[String::from("{not json}")]).is_err());
+        assert!(parse_params(&[String::from("[1,2]")]).is_err());
+    }
+
+    #[test]
+    fn timeout_defaults_to_something_and_zero_is_allowed() {
+        let cli = Cli::try_parse_from(["ares-do", "key", "OK"]).unwrap();
+        assert_eq!(cli.timeout, Duration::from_secs(30));
+        let cli = Cli::try_parse_from(["ares-do", "--timeout", "0", "key", "OK"]).unwrap();
+        assert!(cli.timeout.is_zero());
+    }
+
+    #[test]
+    fn luna_defaults_to_the_private_bus_and_an_empty_payload() {
+        let Command::Luna(args) = FlowLine::try_parse_from(["luna", "luna://x/y"])
+            .unwrap()
+            .command
+        else {
+            panic!("expected luna");
+        };
+        assert!(!args.public);
+        assert_eq!(args.payload, "{}");
+    }
+
+    #[test]
+    fn exec_is_also_spelled_sh() {
+        let a = FlowLine::try_parse_from(["exec", "ls"]).unwrap().command;
+        let b = FlowLine::try_parse_from(["sh", "ls"]).unwrap().command;
+        assert_eq!(format!("{a:?}"), format!("{b:?}"));
     }
 
     #[test]

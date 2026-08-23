@@ -138,6 +138,7 @@ pub(crate) struct CaptureResult {
 /// not pay for the fallback twenty times.
 pub(crate) struct Capturer {
     method: CaptureMethod,
+    timeout: Option<Duration>,
     remote_dir: String,
     retries: u8,
     known_uri: Option<&'static str>,
@@ -145,9 +146,15 @@ pub(crate) struct Capturer {
 }
 
 impl Capturer {
-    pub(crate) fn new(method: CaptureMethod, remote_dir: String, retries: u8) -> Self {
+    pub(crate) fn new(
+        method: CaptureMethod,
+        remote_dir: String,
+        retries: u8,
+        timeout: Option<Duration>,
+    ) -> Self {
         Capturer {
             method,
+            timeout,
             remote_dir,
             retries,
             known_uri: None,
@@ -168,7 +175,7 @@ impl Capturer {
             "method": self.method.as_luna(),
             "format": "PNG",
         });
-        let reply: LunaReply = luna::raw(&session.session, uri, &payload, reporter)?;
+        let reply: LunaReply = luna::raw(&session.session, uri, &payload, self.timeout, reporter)?;
         reply.check(uri)
     }
 

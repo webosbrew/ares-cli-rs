@@ -8,7 +8,6 @@
 use std::fmt::{Display, Formatter};
 use std::io::Error as IoError;
 
-use ares_connection_lib::luna::LunaError;
 use ares_connection_lib::session::SessionError;
 use ares_connection_lib::transfer::TransferError;
 
@@ -31,8 +30,18 @@ pub(crate) enum DoError {
         user: String,
         uid: Option<u32>,
     },
-    /// `luna-send` itself failed: no such service, no permission, dead channel.
-    LunaUnavailable { uri: String, source: LunaError },
+    /// `luna-send` exited non-zero. Carries what it said.
+    LunaCommand {
+        uri: String,
+        code: i32,
+        said: String,
+    },
+    /// `luna-send` succeeded but what came back was not a reply.
+    LunaReply {
+        uri: String,
+        said: String,
+        why: String,
+    },
     /// The service answered, and said no.
     LunaFailed {
         uri: String,
@@ -52,6 +61,8 @@ pub(crate) enum DoError {
     Timeout(String),
     /// Bad input that clap did not catch, such as untypeable text.
     Usage(String),
+    /// `exec` ran a command and it failed. Carries the command's own status.
+    RemoteCommand { command: String, code: i32 },
 }
 
 impl DoError {
@@ -62,10 +73,12 @@ impl DoError {
             DoError::DeviceNotFound { .. } | DoError::DeviceLookup(_) => 3,
             DoError::Connect { .. } => 4,
             DoError::NotRoot { .. } => 5,
-            DoError::LunaUnavailable { .. } => 6,
+            DoError::LunaCommand { .. } | DoError::LunaReply { .. } => 6,
             DoError::LunaFailed { .. } => 7,
             DoError::Io(_) | DoError::Transfer(_) => 8,
             DoError::Capture(_) | DoError::Timeout(_) => 9,
+            // Forwarded, not from this table — see the README.
+            DoError::RemoteCommand { code, .. } => *code,
         }
     }
 
@@ -78,11 +91,12 @@ impl DoError {
             DoError::DeviceLookup(_) | DoError::DeviceNotFound { .. } => "device_not_found",
             DoError::Connect { .. } => "connect_failed",
             DoError::NotRoot { .. } => "not_root",
-            DoError::LunaUnavailable { .. } => "luna_unavailable",
+            DoError::LunaCommand { .. } | DoError::LunaReply { .. } => "luna_unavailable",
             DoError::LunaFailed { .. } => "luna_failed",
             DoError::Transfer(_) | DoError::Io(_) => "io",
             DoError::Capture(_) => "capture_failed",
             DoError::Timeout(_) => "timeout",
+            DoError::RemoteCommand { .. } => "remote_command",
         }
     }
 }
@@ -116,14 +130,13 @@ impl Display for DoError {
                      Pass --allow-non-root to try anyway."
                 )
             }
-            DoError::LunaUnavailable { uri, source } => {
-                // LunaError cannot distinguish "no such service" from "not
-                // allowed on this bus", so say both rather than guess.
-                write!(f, "Could not call {uri}: {source}")?;
-                if let Some(hint) = crate::luna::unavailable_hint(source) {
-                    write!(f, "\n  {hint}")?;
-                }
-                Ok(())
+            DoError::LunaCommand { uri, code, said } => write!(
+                f,
+                "luna-send exited {code} calling {uri}: {said}\n  \
+                 The service may be missing, or this user may not be allowed on the private bus."
+            ),
+            DoError::LunaReply { uri, said, why } => {
+                write!(f, "{uri} did not answer with a reply ({why}): {said}")
             }
             DoError::LunaFailed { uri, code, text } => {
                 write!(f, "{uri} refused the call: {text}")?;
@@ -137,6 +150,9 @@ impl Display for DoError {
             DoError::Io(e) => write!(f, "{e}"),
             DoError::Timeout(what) => write!(f, "Timed out waiting for {what}"),
             DoError::Usage(message) => write!(f, "{message}"),
+            DoError::RemoteCommand { command, code } => {
+                write!(f, "`{command}` exited {code} on the device")
+            }
             DoError::Flow(errors) => {
                 for (i, error) in errors.iter().enumerate() {
                     if i > 0 {
