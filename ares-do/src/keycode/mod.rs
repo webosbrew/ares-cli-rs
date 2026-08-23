@@ -7,6 +7,7 @@
 use std::fmt::{Display, Formatter};
 
 mod alias;
+mod remote;
 mod table;
 
 #[cfg(test)]
@@ -34,6 +35,18 @@ impl Display for Key {
             None => write!(f, "{}", self.code),
         }
     }
+}
+
+/// A remote button, by the name LG gives it.
+///
+/// Checked before the kernel's table, because the two disagree: the Back
+/// button sends 412, while `KEY_BACK` — the name that looks right, and
+/// `XF86Back` in xkb — is 158 and is swallowed before any window sees it.
+fn remote(name: &str) -> Option<u16> {
+    remote::REMOTE
+        .binary_search_by_key(&name, |(n, _)| *n)
+        .ok()
+        .map(|i| remote::REMOTE[i].1)
 }
 
 /// Look up one canonical name, after aliases have been resolved.
@@ -97,9 +110,10 @@ fn distance_within(a: &str, b: &str, max: usize) -> Option<usize> {
 
 /// Every name this tool knows, aliases first so a friendly name wins.
 fn all_names() -> impl Iterator<Item = &'static str> {
-    alias::ALIASES
+    remote::REMOTE
         .iter()
-        .map(|(from, _)| *from)
+        .map(|(name, _)| *name)
+        .chain(alias::ALIASES.iter().map(|(from, _)| *from))
         .chain(table::KEYCODES.iter().map(|(name, _)| *name))
 }
 
@@ -168,6 +182,9 @@ fn add_if(
 /// character lookup has to skip the numeric path entirely.
 pub(crate) fn by_name(name: &str) -> Option<Key> {
     let upper = name.to_ascii_uppercase();
+    if let Some(code) = remote(&upper) {
+        return Some(Key { code, name: None });
+    }
     let bare = upper.strip_prefix("KEY_").unwrap_or(&upper);
     lookup(unalias(bare)).map(|(name, code)| Key {
         code: *code,
@@ -187,6 +204,20 @@ pub(crate) fn parse(value: &str) -> Result<Key, String> {
     }
 
     let upper = value.to_ascii_uppercase();
+
+    // A REMOTE_ name is the button, not the kernel's key of that name.
+    if let Some(code) = remote(&upper) {
+        return Ok(Key {
+            code,
+            name: Some(
+                remote::REMOTE[remote::REMOTE
+                    .binary_search_by_key(&upper.as_str(), |(n, _)| *n)
+                    .unwrap()]
+                .0,
+            ),
+        });
+    }
+
     let bare = upper.strip_prefix("KEY_").unwrap_or(&upper);
     let canonical = unalias(bare);
 
@@ -238,11 +269,18 @@ pub(crate) fn list(all: bool, pattern: Option<&str>) -> Vec<Listed> {
         .into_iter()
         .filter_map(|name| {
             let (name, code) = *lookup(name)?;
-            let aliases: Vec<&'static str> = alias::ALIASES
+            let mut aliases: Vec<&'static str> = alias::ALIASES
                 .iter()
                 .filter(|(_, to)| *to == name)
                 .map(|(from, _)| *from)
                 .collect();
+            // A REMOTE_ name belongs to whichever key carries its code.
+            aliases.extend(
+                remote::REMOTE
+                    .iter()
+                    .filter(|(_, c)| *c == code)
+                    .map(|(n, _)| *n),
+            );
             let note = alias::NOTES
                 .iter()
                 .find(|(key, _)| *key == name)

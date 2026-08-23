@@ -177,13 +177,16 @@ fn the_lg_remote_buttons_map_where_the_firmware_says() {
     // the buttons whose evdev code is not the mainline name you would guess,
     // and getting one wrong means pressing a different button on the TV.
     for (alias, code) in [
-        ("GOBACK", 412),
-        ("GUIDE", 362),
-        ("RECLIST", 144),
-        ("SOURCE", 241),
-        ("INPUT", 241),
-        ("VOICE", 428),
-        ("FAVORITE", 364),
+        ("REMOTE_BACK", 412),
+        ("REMOTE_GUIDE", 362),
+        ("REMOTE_TVGUIDE", 362),
+        ("REMOTE_RECLIST", 144),
+        ("REMOTE_TV_VIDEO", 241),
+        ("REMOTE_INPUT_SOURCE", 241),
+        ("REMOTE_VOICE", 428),
+        ("REMOTE_FAVORITE", 364),
+        ("REMOTE_MENU", 139),
+        ("REMOTE_SETTINGS", 139),
     ] {
         assert_eq!(parse(alias).unwrap().code, code, "{alias}");
     }
@@ -206,7 +209,7 @@ fn back_is_still_the_kernels_back_and_says_it_is_not_the_remotes() {
         .find(|k| k.name == "BACK")
         .and_then(|k| k.note)
         .unwrap();
-    assert!(note.contains("PREVIOUS"), "{note}");
+    assert!(note.contains("REMOTE_BACK"), "{note}");
 }
 
 #[test]
@@ -224,4 +227,38 @@ fn by_name_refuses_numbers() {
     use super::by_name;
     assert!(super::by_name("28").is_none());
     assert_eq!(by_name("ok").unwrap().code, 28);
+}
+
+#[test]
+fn remote_names_win_over_the_kernels_key_of_the_same_name() {
+    // The one that matters: XF86Back/KEY_BACK is 158 and goes nowhere, while
+    // the button on the remote sends 412.
+    assert_eq!(parse("REMOTE_BACK").unwrap().code, 412);
+    assert_eq!(parse("BACK").unwrap().code, 158);
+    assert_eq!(parse("KEY_BACK").unwrap().code, 158);
+}
+
+#[test]
+fn remote_names_are_sorted_and_case_insensitive() {
+    for pair in super::remote::REMOTE.windows(2) {
+        assert!(pair[0].0 < pair[1].0, "{:?} then {:?}", pair[0], pair[1]);
+    }
+    assert_eq!(
+        parse("remote_exit").unwrap().code,
+        parse("REMOTE_EXIT").unwrap().code
+    );
+}
+
+#[test]
+fn every_remote_code_is_deliverable() {
+    // sendKeyCode goes through /dev/uinput, so anything above KEY_MAX cannot
+    // arrive however it is spelled. The generator drops those; check it did.
+    for (name, code) in super::remote::REMOTE {
+        assert!(*code <= KEY_MAX, "{name} = {code}");
+    }
+}
+
+#[test]
+fn a_mistyped_remote_name_suggests_a_real_one() {
+    assert!(super::suggestions("REMOTE_BAC").contains(&"REMOTE_BACK"));
 }

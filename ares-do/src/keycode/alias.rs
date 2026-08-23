@@ -11,16 +11,10 @@
 //! authority is `/usr/share/X11/xkb/keycodes/lg` in the firmware (xkb keycodes
 //! are the evdev code plus 8):
 //!
-//! | remote button | evdev | mainline name    |
-//! |---------------|-------|------------------|
-//! | Back          | 412   | `PREVIOUS`       |
-//! | Guide         | 362   | `PROGRAM`        |
-//! | Rec List      | 144   | `FILE`           |
-//! | Input/Source  | 241   | `VIDEO_NEXT`     |
-//! | Voice         | 428   | `VOICEMAIL`      |
-//!
-//! The aliases below give those buttons the name they have on the remote,
-//! without renaming the kernel's own keys.
+//! That table is now generated into [`super::remote`] as `REMOTE_*` names, so
+//! the Back button is `REMOTE_BACK` (412) and the kernel's `BACK` stays 158.
+//! What is left here is the small hand-written layer: short spellings people
+//! reach for, the curated listing order, and the caveats.
 
 /// Friendly name -> canonical name in [`super::table::KEYCODES`].
 ///
@@ -37,22 +31,15 @@ pub(super) static ALIASES: &[(&str, &str)] = &[
     ("CHUP", "CHANNELUP"),
     ("DASH", "MINUS"),
     ("ESCAPE", "ESC"),
-    ("FAVORITE", "FAVORITES"),
     ("FF", "FASTFORWARD"),
-    ("GOBACK", "PREVIOUS"),
-    ("GUIDE", "PROGRAM"),
-    ("INPUT", "VIDEO_NEXT"),
     ("LAUNCHER", "LEFTMETA"),
     ("META", "LEFTMETA"),
     ("OK", "ENTER"),
     ("PERIOD", "DOT"),
     ("QUIT", "EXIT"),
-    ("RECLIST", "FILE"),
     ("RETURN", "ENTER"),
     ("REW", "REWIND"),
-    ("SOURCE", "VIDEO_NEXT"),
     ("SUPER", "LEFTMETA"),
-    ("VOICE", "VOICEMAIL"),
     ("VOLDOWN", "VOLUMEDOWN"),
     ("VOLUP", "VOLUMEUP"),
 ];
@@ -131,12 +118,12 @@ pub(super) static NOTES: &[(&str, &str)] = &[
     ),
     (
         "BACK",
-        "not the Back button on an LG remote — that is PREVIOUS (412), aliased GOBACK. \
-         158 is swallowed before it reaches any window",
+        "not the Back button on a remote — that is REMOTE_BACK (412). 158 is XF86Back, \
+         and is swallowed before it reaches any window",
     ),
     (
         "PREVIOUS",
-        "the Back button on an LG remote, per the firmware's xkb keycodes",
+        "what the Back button sends; spelled REMOTE_BACK",
     ),
     (
         "LEFTMETA",
