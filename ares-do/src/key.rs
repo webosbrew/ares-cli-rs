@@ -29,7 +29,12 @@ pub(crate) trait SendKey {
     /// # Errors
     ///
     /// Whatever the luna call failed with.
-    fn send_key(&self, key: Key, reporter: &Reporter) -> Result<(), DoError>;
+    fn send_key(
+        &self,
+        key: Key,
+        timeout: Option<Duration>,
+        reporter: &Reporter,
+    ) -> Result<(), DoError>;
 
     /// Send each key in turn, waiting `delay` *between* them.
     ///
@@ -39,26 +44,44 @@ pub(crate) trait SendKey {
     /// # Errors
     ///
     /// Stops at the first key that fails, and says which one.
-    fn send_keys(&self, keys: &[Key], delay: Duration, reporter: &Reporter) -> Result<(), DoError>;
+    fn send_keys(
+        &self,
+        keys: &[Key],
+        delay: Duration,
+        timeout: Option<Duration>,
+        reporter: &Reporter,
+    ) -> Result<(), DoError>;
 }
 
 impl SendKey for Session {
-    fn send_key(&self, key: Key, reporter: &Reporter) -> Result<(), DoError> {
+    fn send_key(
+        &self,
+        key: Key,
+        timeout: Option<Duration>,
+        reporter: &Reporter,
+    ) -> Result<(), DoError> {
         luna::call(
             self,
             SEND_KEY_URI,
             &SendKeyCode { key_code: key.code },
+            timeout,
             reporter,
         )
     }
 
-    fn send_keys(&self, keys: &[Key], delay: Duration, reporter: &Reporter) -> Result<(), DoError> {
+    fn send_keys(
+        &self,
+        keys: &[Key],
+        delay: Duration,
+        timeout: Option<Duration>,
+        reporter: &Reporter,
+    ) -> Result<(), DoError> {
         let timer = Timer::start();
         for (i, key) in keys.iter().enumerate() {
             if i > 0 && !delay.is_zero() {
                 sleep(delay);
             }
-            self.send_key(*key, reporter)?;
+            self.send_key(*key, timeout, reporter)?;
         }
 
         let rendered: Vec<String> = keys.iter().map(ToString::to_string).collect();

@@ -70,8 +70,12 @@ fn dispatch(cli: &Cli, reporter: &Reporter) -> Result<(), DoError> {
         source,
     })?;
 
-    session.require_root(cli.allow_non_root, reporter)?;
-    run::sweep_leftovers(&session, reporter);
+    // `--timeout 0` means wait forever, which is the only way to run something
+    // genuinely long without picking a number for it.
+    let timeout = (!cli.timeout.is_zero()).then_some(cli.timeout);
 
-    Runner::new(&session, reporter).one(&cli.command)
+    session.require_root(cli.allow_non_root, timeout, reporter)?;
+    run::sweep_leftovers(&session, timeout, reporter);
+
+    Runner::new(&session, timeout, reporter).one(&cli.command)
 }

@@ -165,6 +165,7 @@ pub(crate) trait TypeText {
         text: &str,
         lower: bool,
         delay: Duration,
+        timeout: Option<Duration>,
         reporter: &Reporter,
     ) -> Result<(), DoError>;
 }
@@ -175,6 +176,7 @@ impl TypeText for Session {
         text: &str,
         lower: bool,
         delay: Duration,
+        timeout: Option<Duration>,
         reporter: &Reporter,
     ) -> Result<(), DoError> {
         let keys = text_to_keys(text, lower)?;
@@ -183,7 +185,7 @@ impl TypeText for Session {
             if i > 0 && !delay.is_zero() {
                 sleep(delay);
             }
-            self.send_key(*key, reporter)?;
+            self.send_key(*key, timeout, reporter)?;
         }
         reporter.info(&format!("Typed {text:?}"));
         reporter.event(&json!({

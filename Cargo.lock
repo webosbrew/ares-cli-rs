@@ -130,6 +130,7 @@ dependencies = [
  "libssh-rs",
  "serde",
  "serde_json",
+ "snailquote",
 ]
 
 [[package]]
