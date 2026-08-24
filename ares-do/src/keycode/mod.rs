@@ -218,7 +218,18 @@ pub(crate) fn parse(value: &str) -> Result<Key, String> {
         });
     }
 
-    let bare = upper.strip_prefix("KEY_").unwrap_or(&upper);
+    // KEY_ and XF86 both say "the kernel's key of this name, and I mean it",
+    // so they are never ambiguous. A bare name might be.
+    let explicit = upper.starts_with("KEY_") || upper.starts_with("XF86");
+    let bare = upper
+        .strip_prefix("KEY_")
+        .or_else(|| upper.strip_prefix("XF86"))
+        .unwrap_or(&upper);
+
+    if !explicit && let Some((name, why)) = alias::AMBIGUOUS.iter().find(|(n, _)| *n == bare) {
+        return Err(format!("\"{name}\" is ambiguous: {why}"));
+    }
+
     let canonical = unalias(bare);
 
     if let Some((name, code)) = lookup(canonical) {

@@ -26,7 +26,7 @@ fn the_codes_from_the_field_notes_still_hold() {
     for (name, code) in [
         ("ENTER", 28),
         ("TAB", 15),
-        ("BACK", 158),
+        ("KEY_BACK", 158),
         ("EXIT", 174),
         ("UP", 103),
         ("DOWN", 108),
@@ -203,7 +203,7 @@ fn the_launcher_key_is_reachable_by_every_name_for_it() {
 fn back_is_still_the_kernels_back_and_says_it_is_not_the_remotes() {
     // Keeping 158 under its own name matters: silently remapping it would
     // make `ares-do key BACK` send something the name does not say.
-    assert_eq!(parse("BACK").unwrap().code, 158);
+    assert_eq!(parse("KEY_BACK").unwrap().code, 158);
     let note = list(true, Some("BACK"))
         .into_iter()
         .find(|k| k.name == "BACK")
@@ -230,12 +230,53 @@ fn by_name_refuses_numbers() {
 }
 
 #[test]
-fn remote_names_win_over_the_kernels_key_of_the_same_name() {
-    // The one that matters: XF86Back/KEY_BACK is 158 and goes nowhere, while
-    // the button on the remote sends 412.
+fn an_ambiguous_bare_name_is_refused_rather_than_guessed() {
+    // The one that matters. Bare BACK used to resolve to 158, which is a real
+    // key that the platform swallows, so it looked like the tool had worked.
+    let message = parse("BACK").unwrap_err();
+    assert!(message.contains("ambiguous"), "{message}");
+    assert!(message.contains("REMOTE_BACK"), "{message}");
+    assert!(message.contains("412"), "{message}");
+    assert_eq!(
+        parse("back").unwrap_err(),
+        message,
+        "case must not dodge it"
+    );
+}
+
+#[test]
+fn both_readings_stay_reachable_by_saying_which() {
     assert_eq!(parse("REMOTE_BACK").unwrap().code, 412);
-    assert_eq!(parse("BACK").unwrap().code, 158);
     assert_eq!(parse("KEY_BACK").unwrap().code, 158);
+    assert_eq!(parse("XF86BACK").unwrap().code, 158);
+    assert_eq!(parse("xf86back").unwrap().code, 158);
+    assert_eq!(parse("158").unwrap().code, 158);
+}
+
+#[test]
+fn the_xf86_prefix_works_for_ordinary_keys_too() {
+    assert_eq!(parse("XF86EXIT").unwrap().code, parse("EXIT").unwrap().code);
+}
+
+#[test]
+fn every_colliding_name_is_declared_ambiguous() {
+    // The rule this list exists for, checked rather than remembered: if a
+    // REMOTE_X and a bare X disagree about the code, X must refuse.
+    for (remote_name, remote_code) in super::remote::REMOTE {
+        let Some(bare) = remote_name.strip_prefix("REMOTE_") else {
+            continue;
+        };
+        let Some((_, kernel_code)) = lookup(bare) else {
+            continue;
+        };
+        if kernel_code != remote_code {
+            assert!(
+                alias::AMBIGUOUS.iter().any(|(n, _)| n == &bare),
+                "{bare} is {kernel_code} to the kernel and {remote_code} to the remote, \
+                 so it must be in AMBIGUOUS"
+            );
+        }
+    }
 }
 
 #[test]
