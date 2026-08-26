@@ -1,0 +1,29 @@
+[package]
+name = "ares-do"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+readme = "README.md"
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Send key events and take screenshots on a webOS device"
+
+[lints]
+workspace = true
+
+[dependencies]
+ares-device-lib = { workspace = true }
+ares-connection-lib = { workspace = true }
+clap = { workspace = true, features = ["derive", "env"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+libssh-rs = { workspace = true }
+# Same escaping ares-connection-lib uses, so a command built here and one
+# built there quote identically.
+snailquote = "0.3.1"
+
+[package.metadata.deb]
+section = "devel"

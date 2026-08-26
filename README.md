@@ -21,6 +21,7 @@ The device list is shared with the official CLI, so you can mix both.
 | [`ares-push`](ares-push#readme)                | Copy files to the device                       |
 | [`ares-pull`](ares-pull#readme)                | Copy files from the device                     |
 | [`ares-novacom`](ares-novacom#readme)          | Fetch the device SSH key, forward a port       |
+| [`ares-do`](ares-do#readme)                    | Send key events, take screenshots, replay flows |
 
 Each command has its own README with the full option list and examples. Every
 tool also accepts `--help`. Every device-facing tool accepts `-d NAME`, or reads
@@ -34,7 +35,7 @@ All install methods below give you the **whole set** of tools at once.
 
 Download one archive per platform from the
 [latest release](https://github.com/webosbrew/ares-cli-rs/releases/latest).
-It holds all nine binaries.
+It holds all ten binaries.
 
 Linux and macOS:
 
@@ -88,7 +89,7 @@ Needs a [Rust](https://rustup.rs/) toolchain, plus the build dependencies below.
 ```sh
 cargo install --locked --git https://github.com/webosbrew/ares-cli-rs \
   ares-setup-device ares-device ares-package ares-install ares-launch \
-  ares-shell ares-push ares-pull ares-novacom
+  ares-shell ares-push ares-pull ares-novacom ares-do
 ```
 
 Cargo puts the binaries in `~/.cargo/bin`, which is already on your `PATH`

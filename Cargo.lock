@@ -121,6 +121,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ares-do"
+version = "0.6.0"
+dependencies = [
+ "ares-connection-lib",
+ "ares-device-lib",
+ "clap",
+ "libssh-rs",
+ "serde",
+ "serde_json",
+ "snailquote",
+]
+
+[[package]]
 name = "ares-install"
 version = "0.6.0"
 dependencies = [

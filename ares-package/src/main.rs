@@ -83,7 +83,10 @@ fn main() {
         return;
     }
     if forced.is_some() {
-        eprintln!("Warning: architecture {} was explicitly forced via -A", arch);
+        eprintln!(
+            "Warning: architecture {} was explicitly forced via -A",
+            arch
+        );
     }
 
     let path = outdir.join(format!(

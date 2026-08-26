@@ -1,5 +1,6 @@
 use std::io::Error;
 
+pub mod exec;
 pub mod luna;
 pub mod session;
 pub mod setup;
