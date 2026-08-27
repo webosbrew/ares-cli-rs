@@ -5,7 +5,7 @@ use ares_connection_lib::session::NewSession;
 use ares_device_lib::DeviceManager;
 use ares_device_lib::cli::unwrap_or_exit;
 use clap::Parser;
-use install::InstallApp;
+use install::{InstallApp, InstallError};
 use list::ListApps;
 
 use crate::remove::RemoveApp;
@@ -80,6 +80,13 @@ fn main() {
     } else if let Some(package) = cli.package {
         match session.install_app(package) {
             Ok(_) => {}
+            // An interrupted install reports itself: "Failed to install" would
+            // contradict the one thing the message has to say, which is that
+            // nobody knows yet.
+            Err(e @ InstallError::Interrupted { .. }) => {
+                eprintln!("{e}");
+                exit(1);
+            }
             Err(e) => {
                 eprintln!("Failed to install: {e}");
                 exit(1);
