@@ -74,9 +74,8 @@ impl InstallApp for DeviceSession {
             IoError::new(
                 ErrorKind::Other,
                 format!(
-                    "Failed to generate checksum for {}: {:?}",
-                    package.as_ref().to_string_lossy(),
-                    e
+                    "Failed to generate checksum for {}: {e}",
+                    package.as_ref().to_string_lossy()
                 ),
             )
         })?;
@@ -114,7 +113,7 @@ impl InstallApp for DeviceSession {
         pb.set_message("Checking uploaded package");
         let verified = verify_upload(self, &ipk_path, &checksum);
         if let Err(e) = &verified {
-            pb.suspend(|| eprintln!("Upload of {package_display_name} is broken: {e:?}"));
+            pb.suspend(|| eprintln!("Upload of {package_display_name} is broken: {e}"));
         }
 
         let result = verified.and_then(|_| {
@@ -160,14 +159,25 @@ impl InstallApp for DeviceSession {
         if let Ok(package_id) = &result {
             pb.suspend(|| println!("Installed package {}!", package_id));
         }
-        pb.suspend(|| println!("Deleting uploaded package..."));
 
         pb.set_prefix("Cleanup");
         pb.set_message("Deleting uploaded package");
 
-        if let Err(e) = self.rm(&ipk_path) {
+        // Cleaning up over a connection that is already gone only produces a
+        // second, confusing error - and it lands before the one that explains
+        // the run, because this happens on the way out. Say what was left
+        // behind instead, and let the real error through.
+        if self.is_connected() {
+            pb.suspend(|| println!("Deleting uploaded package..."));
+            if let Err(e) = self.rm(&ipk_path) {
+                pb.suspend(|| eprintln!("Failed to delete {ipk_path}: {e}"));
+            }
+        } else {
             pb.suspend(|| {
-                eprintln!("Failed to delete {}: {:?}", ipk_path, e);
+                eprintln!(
+                    "Lost the connection to {}, so {ipk_path} is still on the device.",
+                    self.device.name
+                );
             });
         }
         pb.finish_and_clear();
