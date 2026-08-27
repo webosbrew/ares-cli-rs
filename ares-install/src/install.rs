@@ -21,6 +21,9 @@ pub enum InstallError {
     Response { error_code: i32, reason: String },
     /// The install stream ended without ever saying how it went.
     NoVerdict,
+    /// The connection went down with the install already under way, so what
+    /// the device did with the package is not known.
+    Interrupted { device: String },
     ChecksumMismatch { expected: String, actual: String },
     Luna(LunaError),
     Transfer(TransferError),
@@ -36,6 +39,13 @@ impl Display for InstallError {
             InstallError::NoVerdict => write!(
                 f,
                 "the device stopped reporting before it said whether the package installed"
+            ),
+            InstallError::Interrupted { device } => write!(
+                f,
+                "lost the connection to {device} while the install was running. The device may \
+                 have installed the package anyway - `ares-install -d {device} --listfull` \
+                 prints the version that is on it. `--list` alone only names the app, which \
+                 says nothing about which build landed"
             ),
             InstallError::ChecksumMismatch { expected, actual } => write!(
                 f,
@@ -163,6 +173,21 @@ impl InstallApp for DeviceSession {
                     .unwrap_or(Err(InstallError::NoVerdict)),
                 Err(e) => Err(e.into()),
             }
+        });
+
+        // The install request is sent before the device answers it, so a
+        // connection that dies here says nothing about what the device did -
+        // and on some sets the install goes through regardless. Calling that a
+        // failed install is a guess, and the wrong one often enough to matter.
+        let result = result.map_err(|e| match e {
+            InstallError::Luna(LunaError::Session(_)) | InstallError::Io(_)
+                if !self.is_connected() =>
+            {
+                InstallError::Interrupted {
+                    device: self.device.name.clone(),
+                }
+            }
+            other => other,
         });
 
         if let Ok(package_id) = &result {
