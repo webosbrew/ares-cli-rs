@@ -19,6 +19,8 @@ pub(crate) trait InstallApp {
 #[derive(Debug)]
 pub enum InstallError {
     Response { error_code: i32, reason: String },
+    /// The install stream ended without ever saying how it went.
+    NoVerdict,
     ChecksumMismatch { expected: String, actual: String },
     Luna(LunaError),
     Transfer(TransferError),
@@ -31,6 +33,10 @@ impl Display for InstallError {
             InstallError::Response { error_code, reason } => {
                 write!(f, "{reason} (error {error_code})")
             }
+            InstallError::NoVerdict => write!(
+                f,
+                "the device stopped reporting before it said whether the package installed"
+            ),
             InstallError::ChecksumMismatch { expected, actual } => write!(
                 f,
                 "uploaded package is corrupted: expected sha256 {expected}, device has {actual}"
@@ -151,7 +157,10 @@ impl InstallApp for DeviceSession {
                         )
                     })
                     .next()
-                    .unwrap_or_else(|| Ok(String::new())),
+                    // Reaching the end of the stream having seen neither
+                    // "installed" nor a failure is not a success. Reporting one
+                    // claims a package is on the device that may well not be.
+                    .unwrap_or(Err(InstallError::NoVerdict)),
                 Err(e) => Err(e.into()),
             }
         });
