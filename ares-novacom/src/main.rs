@@ -137,6 +137,11 @@ fn parse_port(spec: &str) -> Result<(u16, u16), String> {
     Ok((device_port, host_port))
 }
 
+/// How long to wait on the device for more data, while a connection is still
+/// moving bytes and once it has gone quiet.
+const BUSY_POLL: Duration = Duration::from_millis(1);
+const IDLE_POLL: Duration = Duration::from_millis(50);
+
 /// Pumps bytes both ways between a local TCP connection and an SSH forwarding
 /// channel until either side closes. Uses short polling timeouts so a single
 /// SSH session can service several connections without one blocking the others.
@@ -149,6 +154,11 @@ fn bridge(session: &DeviceSession, mut tcp: TcpStream, device_port: u16) -> Resu
 
     let mut buf = [0u8; 16 * 1024];
     let mut socket_eof = false;
+    // A quiet connection should not spin, but waiting 50ms on the device after
+    // every buffer would throttle a busy one to a few hundred KB/s. So poll the
+    // device briefly while bytes are still moving, and settle down once they
+    // stop.
+    let mut busy = false;
     loop {
         if !socket_eof {
             match tcp.read(&mut buf) {
@@ -156,18 +166,26 @@ fn bridge(session: &DeviceSession, mut tcp: TcpStream, device_port: u16) -> Resu
                     socket_eof = true;
                     let _ = channel.send_eof();
                 }
-                Ok(n) => channel.stdin().write_all(&buf[..n])?,
+                Ok(n) => {
+                    channel.stdin().write_all(&buf[..n])?;
+                    busy = true;
+                }
                 Err(e) if would_block(&e) => {}
                 Err(e) => return Err(e),
             }
         }
-        match channel.read_timeout(&mut buf, false, Some(Duration::from_millis(50))) {
+        let poll = if busy { BUSY_POLL } else { IDLE_POLL };
+        busy = false;
+        match channel.read_timeout(&mut buf, false, Some(poll)) {
             Ok(0) => {
                 if channel.is_eof() {
                     break;
                 }
             }
-            Ok(n) => tcp.write_all(&buf[..n])?,
+            Ok(n) => {
+                tcp.write_all(&buf[..n])?;
+                busy = true;
+            }
             // No device data yet within the poll window; keep going.
             Err(SshError::TryAgain) => {}
             Err(e) => return Err(to_io(e)),
