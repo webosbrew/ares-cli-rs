@@ -20,7 +20,7 @@ The device list is shared with the official CLI, so you can mix both.
 | [`ares-shell`](ares-shell#readme)              | Open a shell, or run one command on the device  |
 | [`ares-push`](ares-push#readme)                | Copy files to the device                       |
 | [`ares-pull`](ares-pull#readme)                | Copy files from the device                     |
-| [`ares-novacom`](ares-novacom#readme)          | Fetch the device SSH key, forward a port       |
+| [`ares-novacom`](ares-novacom#readme)          | Fetch the SSH key, forward ports both ways     |
 
 Each command has its own README with the full option list and examples. Every
 tool also accepts `--help`. Every device-facing tool accepts `-d NAME`, or reads

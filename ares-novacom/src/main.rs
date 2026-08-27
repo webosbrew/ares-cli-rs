@@ -15,7 +15,7 @@ use ares_connection_lib::session::{DeviceSession, NewSession};
 use ares_device_lib::cli::unwrap_or_exit;
 use ares_device_lib::{DeviceManager, PrivateKey};
 use clap::Parser;
-use libssh_rs::Error as SshError;
+use libssh_rs::{Channel, Error as SshError};
 use socket2::{SockRef, TcpKeepalive};
 
 #[derive(Parser, Debug)]
@@ -51,6 +51,14 @@ struct Cli {
     )]
     forward: bool,
     #[arg(
+        short = 'r',
+        long,
+        group = "action",
+        requires = "port",
+        help = "Publish a host port on the device (reverse forward; use with --port)"
+    )]
+    reverse: bool,
+    #[arg(
         short = 'p',
         long,
         value_name = "DEVICE_PORT[:HOST_PORT]",
@@ -71,6 +79,8 @@ fn main() {
         );
     } else if cli.forward {
         forward(&manager, cli.device.as_deref(), cli.port.as_deref());
+    } else if cli.reverse {
+        reverse(&manager, cli.device.as_deref(), cli.port.as_deref());
     } else {
         Cli::parse_from(["", "--help"]);
     }
@@ -82,7 +92,8 @@ fn main() {
 /// forward then waits forever for connections that can no longer arrive.
 ///
 /// TCP keepalive is what notices. When the probes go unanswered the socket
-/// fails, and libssh reports the loss instead of staying quiet.
+/// fails, libssh sees the error, and the loop below finds `is_connected()`
+/// false and says so.
 fn keep_alive(session: &DeviceSession) {
     let keepalive = TcpKeepalive::new()
         .with_time(Duration::from_secs(30))
@@ -151,6 +162,79 @@ fn forward(manager: &DeviceManager, device: Option<&str>, port_spec: Option<&str
     }
 }
 
+/// How long one poll for a new device-side connection may hold the session, and
+/// how long to leave the session alone afterwards. The sum is the worst-case
+/// delay before a new connection is picked up.
+const ACCEPT_POLL: Duration = Duration::from_millis(10);
+const ACCEPT_BACKOFF: Duration = Duration::from_millis(40);
+
+/// Remote port-forward: ask the device to listen on a port of its own, and pump
+/// every connection it accepts back to `127.0.0.1:<host_port>` on this machine.
+fn reverse(manager: &DeviceManager, device: Option<&str>, port_spec: Option<&str>) {
+    let Some(port_spec) = port_spec else {
+        eprintln!("--port is required with --reverse (DEVICE_PORT[:HOST_PORT])");
+        exit(1);
+    };
+    let (device_port, host_port) = match parse_port(port_spec) {
+        Ok(ports) => ports,
+        Err(e) => {
+            eprintln!("{e}");
+            exit(1);
+        }
+    };
+
+    let Some(device) = unwrap_or_exit(manager.find_or_default(device.as_ref()), "find device")
+    else {
+        eprintln!("Device not found");
+        exit(1);
+    };
+
+    let session = unwrap_or_exit(device.new_session(), &format!("connect to {}", device.host));
+    keep_alive(&session);
+
+    // Bind the device's loopback, not all of its interfaces: the point is to
+    // let something running on the device reach the host, not to put the host
+    // port on the network the device sits on.
+    let bound = unwrap_or_exit(
+        session.listen_forward(Some("localhost"), device_port),
+        &format!("ask {} to listen on port {device_port}", device.name),
+    );
+    // A device only names the port it picked when it was asked for port 0.
+    let bound = if bound == 0 { device_port } else { bound };
+    println!(
+        "Publishing 127.0.0.1:{host_port} as localhost:{bound} on {}. Press Ctrl+C to stop.",
+        device.name
+    );
+
+    loop {
+        // A poll holds libssh's session lock for the whole timeout it is given,
+        // and asking for the lock again right away starves the threads pumping
+        // the connections already open. So glance for a moment, then stand back
+        // and let them have the session.
+        match session.accept_forward(ACCEPT_POLL) {
+            Ok((_, channel)) => {
+                thread::spawn(move || {
+                    if let Err(e) = reverse_bridge(&channel, host_port) {
+                        eprintln!("Reverse forward connection closed: {e}");
+                    }
+                });
+                continue;
+            }
+            // An idle poll window. libssh reports it as `TryAgain` only when no
+            // earlier error is still hanging around the session, so anything
+            // else counts as idle too until the connection itself is gone.
+            Err(_) if session.is_connected() => {}
+            Err(_) => {
+                // Whatever libssh last recorded is rarely the reason: a session
+                // that has gone away usually surfaces as a stale `TryAgain`.
+                eprintln!("Lost the connection to {}.", device.name);
+                exit(1);
+            }
+        }
+        thread::sleep(ACCEPT_BACKOFF);
+    }
+}
+
 /// Parses a `DEVICE_PORT[:HOST_PORT]` spec. The host port defaults to the
 /// device port when omitted.
 fn parse_port(spec: &str) -> Result<(u16, u16), String> {
@@ -174,14 +258,27 @@ fn parse_port(spec: &str) -> Result<(u16, u16), String> {
 const BUSY_POLL: Duration = Duration::from_millis(1);
 const IDLE_POLL: Duration = Duration::from_millis(50);
 
-/// Pumps bytes both ways between a local TCP connection and an SSH forwarding
-/// channel until either side closes. Uses short polling timeouts so a single
-/// SSH session can service several connections without one blocking the others.
-fn bridge(session: &DeviceSession, mut tcp: TcpStream, device_port: u16) -> Result<(), IoError> {
+/// Opens a forwarding channel to `localhost:<device_port>` on the device and
+/// pumps `tcp` through it.
+fn bridge(session: &DeviceSession, tcp: TcpStream, device_port: u16) -> Result<(), IoError> {
     let channel = session.new_channel().map_err(to_io)?;
     channel
         .open_forward("localhost", device_port, "127.0.0.1", 0)
         .map_err(to_io)?;
+    pump(&channel, tcp)
+}
+
+/// Connects to `127.0.0.1:<host_port>` on this machine and pumps a channel the
+/// device opened through it.
+fn reverse_bridge(channel: &Channel, host_port: u16) -> Result<(), IoError> {
+    let tcp = TcpStream::connect(("127.0.0.1", host_port))?;
+    pump(channel, tcp)
+}
+
+/// Pumps bytes both ways between a local TCP connection and an SSH forwarding
+/// channel until either side closes. Uses short polling timeouts so a single
+/// SSH session can service several connections without one blocking the others.
+fn pump(channel: &Channel, mut tcp: TcpStream) -> Result<(), IoError> {
     tcp.set_read_timeout(Some(Duration::from_millis(10)))?;
 
     let mut buf = [0u8; 16 * 1024];
