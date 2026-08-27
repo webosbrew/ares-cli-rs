@@ -31,6 +31,11 @@ new file.
 
 `--forward` keeps running until you stop it with Ctrl+C.
 
+A device that goes away without closing the connection — one dropping off
+Wi-Fi, rather than one shutting the session down — used to leave the forward
+waiting on a tunnel that no longer carried anything. The connection is kept
+alive now, so the forward notices within about a minute and exits saying so.
+
 ## Examples
 
 ```sh

@@ -1,5 +1,9 @@
 use std::io::{Error as IoError, ErrorKind, Read, Write};
 use std::net::{TcpListener, TcpStream};
+#[cfg(unix)]
+use std::os::fd::{AsRawFd, BorrowedFd};
+#[cfg(windows)]
+use std::os::windows::io::{AsRawSocket, BorrowedSocket};
 use std::path::Path;
 use std::process::exit;
 use std::sync::Arc;
@@ -12,6 +16,7 @@ use ares_device_lib::cli::unwrap_or_exit;
 use ares_device_lib::{DeviceManager, PrivateKey};
 use clap::Parser;
 use libssh_rs::Error as SshError;
+use socket2::{SockRef, TcpKeepalive};
 
 #[derive(Parser, Debug)]
 #[command(about)]
@@ -71,6 +76,32 @@ fn main() {
     }
 }
 
+/// A forward sits idle for hours, and a device that goes away without closing
+/// the connection - a TV dropping off Wi-Fi, rather than one that shuts the
+/// session down - leaves the host holding a socket it still believes in. The
+/// forward then waits forever for connections that can no longer arrive.
+///
+/// TCP keepalive is what notices. When the probes go unanswered the socket
+/// fails, and libssh reports the loss instead of staying quiet.
+fn keep_alive(session: &DeviceSession) {
+    let keepalive = TcpKeepalive::new()
+        .with_time(Duration::from_secs(30))
+        .with_interval(Duration::from_secs(10));
+    // Windows counts its own retries and has no knob for it.
+    #[cfg(not(windows))]
+    let keepalive = keepalive.with_retries(3);
+
+    // Best effort: a forward that cannot set this still works, it just goes on
+    // trusting a dead socket for as long as TCP does.
+    #[cfg(unix)]
+    let socket = unsafe { BorrowedFd::borrow_raw(session.as_raw_fd()) };
+    #[cfg(windows)]
+    let socket = unsafe { BorrowedSocket::borrow_raw(session.as_raw_socket()) };
+    if let Err(e) = SockRef::from(&socket).set_tcp_keepalive(&keepalive) {
+        eprintln!("Could not set keepalive on the connection: {e}");
+    }
+}
+
 /// Local port-forward: accept TCP connections on a host port and tunnel each
 /// through the device's SSH session to `localhost:<device_port>` on the device.
 fn forward(manager: &DeviceManager, device: Option<&str>, port_spec: Option<&str>) {
@@ -93,6 +124,7 @@ fn forward(manager: &DeviceManager, device: Option<&str>, port_spec: Option<&str
     };
 
     let session = unwrap_or_exit(device.new_session(), &format!("connect to {}", device.host));
+    keep_alive(&session);
     let session = Arc::new(session);
 
     let listener = unwrap_or_exit(

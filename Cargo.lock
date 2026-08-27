@@ -156,6 +156,7 @@ dependencies = [
  "clap",
  "libssh-rs",
  "sha256",
+ "socket2",
 ]
 
 [[package]]
