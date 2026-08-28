@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use ares_connection_lib::luna::{Luna, LunaError, Message};
 use ares_connection_lib::session::DeviceSession;
-use ares_connection_lib::transfer::{FileTransfer, TransferError};
+use ares_connection_lib::transfer::{Transfer, TransferError};
 use indicatif::{ProgressBar, ProgressStyle};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -103,7 +103,14 @@ impl InstallApp for DeviceSession {
             .map(|s| s.to_string_lossy())
             .unwrap_or_else(|| package.as_ref().to_string_lossy());
 
-        self.mkdir(Path::new("/media/developer/temp"), 0o777)?;
+        // One transport for the whole install. Each `Transfer::open` asks the
+        // device for the sftp subsystem, which execs an sftp-server there, so
+        // opening one per step paid for four where one does - and the one
+        // sha256sum opened was never used at all, since that runs over an exec
+        // channel. ares-push and ares-pull already work this way.
+        let transfer = Transfer::open(self);
+
+        transfer.mkdir(Path::new("/media/developer/temp"), 0o777)?;
 
         let pb = ProgressBar::new(file_size);
         pb.suspend(|| {
@@ -117,7 +124,7 @@ impl InstallApp for DeviceSession {
         pb.set_style(ProgressStyle::with_template("{prefix:10.bold.dim} {spinner} {percent:>3}% [{wide_bar}] {bytes}/{total_bytes}  {eta} ETA")
             .unwrap());
 
-        self.put(&mut file, &ipk_path, |transferred| {
+        transfer.put(&mut file, &ipk_path, |transferred| {
             pb.set_position(transferred as u64);
         })?;
 
@@ -127,7 +134,7 @@ impl InstallApp for DeviceSession {
 
         pb.set_prefix("Verifying");
         pb.set_message("Checking uploaded package");
-        let verified = verify_upload(self, &ipk_path, &checksum);
+        let verified = verify_upload(&transfer, &ipk_path, &checksum);
         if let Err(e) = &verified {
             pb.suspend(|| eprintln!("Upload of {package_display_name} is broken: {e}"));
         }
@@ -203,7 +210,7 @@ impl InstallApp for DeviceSession {
         // behind instead, and let the real error through.
         if self.is_connected() {
             pb.suspend(|| println!("Deleting uploaded package..."));
-            if let Err(e) = self.rm(&ipk_path) {
+            if let Err(e) = transfer.rm(&ipk_path) {
                 pb.suspend(|| eprintln!("Failed to delete {ipk_path}: {e}"));
             }
         } else {
@@ -223,11 +230,11 @@ impl InstallApp for DeviceSession {
 
 /// Compare the uploaded package against the local file. Devices without `sha256sum` skip the check.
 fn verify_upload(
-    session: &DeviceSession,
+    transfer: &Transfer,
     ipk_path: &str,
     expected: &str,
 ) -> Result<(), InstallError> {
-    let Some(actual) = session.sha256sum(ipk_path)? else {
+    let Some(actual) = transfer.sha256sum(ipk_path)? else {
         return Ok(());
     };
     if actual != expected {
