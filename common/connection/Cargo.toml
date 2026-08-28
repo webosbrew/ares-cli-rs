@@ -19,6 +19,7 @@ ares-device-lib = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 libssh-rs = { workspace = true }
+socket2 = { workspace = true }
 httparse = { workspace = true }
 snailquote = "0.3.1"
 path-slash = "0.2.1"
