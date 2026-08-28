@@ -45,9 +45,10 @@ impl Validation for ComponentInfo<ServiceInfo> {
         let size = dir_size(&self.path, self.excludes.as_ref())?;
         let mut arch: Option<PackageArch> = None;
         if let (Some(engine), Some(executable)) = (&self.info.engine, &self.info.executable)
-            && engine == "native" {
-                arch = infer_arch(self.path.join(executable), force_arch)?;
-            }
+            && engine == "native"
+        {
+            arch = infer_arch(self.path.join(executable), force_arch)?;
+        }
         Ok(ValidationInfo { arch, size })
     }
 }
@@ -88,7 +89,10 @@ fn infer_arch<P: AsRef<Path>>(path: P, allow_unknown: bool) -> Result<Option<Pac
             } else {
                 Err(Error::new(
                     ErrorKind::InvalidData,
-                    format!("Unsupported binary machine type {}", e_machine_to_string(other)),
+                    format!(
+                        "Unsupported binary machine type {}",
+                        e_machine_to_string(other)
+                    ),
                 ))
             }
         }

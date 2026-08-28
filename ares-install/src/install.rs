@@ -2,6 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::{Error as IoError, ErrorKind};
 use std::path::Path;
+use std::sync::LazyLock;
 use std::time::Duration;
 
 use ares_connection_lib::luna::{Luna, LunaError, Message};
@@ -18,13 +19,21 @@ pub(crate) trait InstallApp {
 
 #[derive(Debug)]
 pub enum InstallError {
-    Response { error_code: i32, reason: String },
+    Response {
+        error_code: i32,
+        reason: String,
+    },
     /// The install stream ended without ever saying how it went.
     NoVerdict,
     /// The connection went down with the install already under way, so what
     /// the device did with the package is not known.
-    Interrupted { device: String },
-    ChecksumMismatch { expected: String, actual: String },
+    Interrupted {
+        device: String,
+    },
+    ChecksumMismatch {
+        expected: String,
+        actual: String,
+    },
     Luna(LunaError),
     Transfer(TransferError),
     Io(IoError),
@@ -160,18 +169,14 @@ impl InstallApp for DeviceSession {
             ) {
                 Ok(subscription) => subscription
                     .filter_map(|item| {
-                        map_installer_message(
-                            item,
-                            &Regex::new(r"(?i)installed").unwrap(),
-                            |progress| {
-                                pb.set_message(
-                                    progress
-                                        .strip_prefix("installing : ")
-                                        .unwrap_or(&progress)
-                                        .to_string(),
-                                );
-                            },
-                        )
+                        map_installer_message(item, &INSTALLED, |progress| {
+                            pb.set_message(
+                                progress
+                                    .strip_prefix("installing : ")
+                                    .unwrap_or(&progress)
+                                    .to_string(),
+                            );
+                        })
                     })
                     .next()
                     // Reaching the end of the stream having seen neither
@@ -229,11 +234,7 @@ impl InstallApp for DeviceSession {
 }
 
 /// Compare the uploaded package against the local file. Devices without `sha256sum` skip the check.
-fn verify_upload(
-    transfer: &Transfer,
-    ipk_path: &str,
-    expected: &str,
-) -> Result<(), InstallError> {
+fn verify_upload(transfer: &Transfer, ipk_path: &str, expected: &str) -> Result<(), InstallError> {
     let Some(actual) = transfer.sha256sum(ipk_path)? else {
         return Ok(());
     };
@@ -246,6 +247,15 @@ fn verify_upload(
     Ok(())
 }
 
+/// The device reports progress a line at a time, so these are matched once per
+/// line. Building them per line meant compiling three regexes per message, and
+/// three `unwrap`s that could panic on a hot path.
+static FAILED: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)FAILED").unwrap());
+static SUCCEEDED: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)^SUCCESS").unwrap());
+pub(crate) static INSTALLED: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)installed").unwrap());
+pub(crate) static REMOVED: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)removed").unwrap());
+
 pub(crate) fn map_installer_message<F: Fn(String)>(
     item: std::io::Result<Message>,
     expected: &Regex,
@@ -256,14 +266,12 @@ pub(crate) fn map_installer_message<F: Fn(String)>(
             Ok(resp) => {
                 if let Some(details) = resp.details {
                     if let Some(state) = details.state {
-                        if Regex::new(r"(?i)FAILED").unwrap().is_match(&state) {
+                        if FAILED.is_match(&state) {
                             return Some(Err(InstallError::Response {
                                 error_code: details.error_code.unwrap_or(0),
                                 reason: details.reason.unwrap_or(String::from("unknown error")),
                             }));
-                        } else if Regex::new(r"(?i)^SUCCESS").unwrap().is_match(&state)
-                            || expected.is_match(&state)
-                        {
+                        } else if SUCCEEDED.is_match(&state) || expected.is_match(&state) {
                             return Some(Ok(details.package_id.unwrap_or(String::from(""))));
                         } else {
                             progress(state);
