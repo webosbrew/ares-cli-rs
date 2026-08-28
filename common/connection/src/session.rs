@@ -5,6 +5,12 @@ use std::time::Duration;
 
 use ares_device_lib::{Device, FileTransfer, PrivateKey};
 use libssh_rs::{AuthStatus, Error as SshError, Session, SshKey, SshOption};
+#[cfg(unix)]
+use std::os::fd::{AsRawFd, BorrowedFd};
+#[cfg(windows)]
+use std::os::windows::io::{AsRawSocket, BorrowedSocket};
+
+use socket2::{SockRef, TcpKeepalive};
 
 pub trait NewSession {
     fn new_session(&self) -> Result<DeviceSession, SessionError>;
@@ -27,7 +33,42 @@ pub fn connect(device: &Device) -> Result<Session, SessionError> {
     session.set_option(SshOption::Port(device.port))?;
     session.set_option(SshOption::User(Some(device.username.clone())))?;
     session.connect()?;
+    keep_alive(&session);
     Ok(session)
+}
+
+/// Ask TCP to notice a device that stops answering.
+///
+/// A device that goes away without closing the connection - one dropping off
+/// Wi-Fi, rather than one shutting the session down - sends no FIN and no RST,
+/// so the host goes on believing in a socket that leads nowhere. Anything
+/// waiting to read then waits forever: an install sitting on a progress
+/// subscription, a forward waiting for connections that can no longer arrive.
+///
+/// Probing turns that silence into an error the caller can report. The probes
+/// are answered by the peer's TCP stack rather than by whatever it is running,
+/// so a device that is merely busy - unpacking a package, or swapping - keeps
+/// answering and is left alone.
+///
+/// Called for you by [`connect`]. Call it yourself only when you build a
+/// session some other way.
+pub fn keep_alive(session: &Session) {
+    let keepalive = TcpKeepalive::new()
+        .with_time(Duration::from_secs(30))
+        .with_interval(Duration::from_secs(10));
+    // Windows counts its own retries and has no knob for it.
+    #[cfg(not(windows))]
+    let keepalive = keepalive.with_retries(3);
+
+    // Best effort: a session that cannot set this still works, it just goes on
+    // trusting a dead socket for as long as TCP does.
+    #[cfg(unix)]
+    let socket = unsafe { BorrowedFd::borrow_raw(session.as_raw_fd()) };
+    #[cfg(windows)]
+    let socket = unsafe { BorrowedSocket::borrow_raw(session.as_raw_socket()) };
+    if let Err(e) = SockRef::from(&socket).set_tcp_keepalive(&keepalive) {
+        eprintln!("Could not set keepalive on the connection: {e}");
+    }
 }
 
 /// Authenticate a connected session as `device`.
