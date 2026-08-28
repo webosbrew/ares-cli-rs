@@ -1,9 +1,8 @@
 use ares_connection_lib::luna::Luna;
 use ares_connection_lib::session::DeviceSession;
-use regex::Regex;
 use serde::Serialize;
 
-use crate::install::{InstallError, map_installer_message};
+use crate::install::{InstallError, REMOVED, map_installer_message};
 
 pub(crate) trait RemoveApp {
     fn remove_app(&self, package_id: &str) -> Result<String, InstallError>;
@@ -28,7 +27,7 @@ impl RemoveApp for DeviceSession {
         ) {
             Ok(subscription) => subscription
                 .filter_map(|item| {
-                    map_installer_message(item, &Regex::new(r"(?i)removed").unwrap(), |progress| {
+                    map_installer_message(item, &REMOVED, |progress| {
                         println!("{}", progress);
                     })
                 })
