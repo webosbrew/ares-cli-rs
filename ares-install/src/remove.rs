@@ -35,6 +35,9 @@ impl RemoveApp for DeviceSession {
             Err(e) => Some(Err(e.into())),
         };
 
-        result.unwrap()
+        // A stream that ends having said neither "removed" nor a failure used
+        // to panic here. It is the same silence an install can meet, and it
+        // deserves the same answer.
+        result.unwrap_or(Err(InstallError::NoVerdict))
     }
 }

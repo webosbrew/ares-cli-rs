@@ -203,7 +203,15 @@ impl InstallApp for DeviceSession {
         });
 
         if let Ok(package_id) = &result {
-            pb.suspend(|| println!("Installed package {}!", package_id));
+            pb.suspend(|| {
+                // The device does not always name what it installed. Better to
+                // say nothing than to print "Installed package !".
+                if package_id.is_empty() {
+                    println!("Installed the package.");
+                } else {
+                    println!("Installed package {package_id}!");
+                }
+            });
         }
 
         pb.set_prefix("Cleanup");
