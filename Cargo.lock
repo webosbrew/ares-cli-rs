@@ -83,7 +83,7 @@ checksum = "d67af77d68a931ecd5cbd8a3b5987d63a1d1d1278f7f6a60ae33db485cdebb69"
 
 [[package]]
 name = "ares-connection-lib"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ares-device-lib",
  "httparse",
@@ -99,7 +99,7 @@ dependencies = [
 
 [[package]]
 name = "ares-device"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ares-connection-lib",
  "ares-device-lib",
@@ -113,7 +113,7 @@ dependencies = [
 
 [[package]]
 name = "ares-device-lib"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "log",
  "pathdiff",
@@ -123,7 +123,7 @@ dependencies = [
 
 [[package]]
 name = "ares-install"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ares-connection-lib",
  "ares-device-lib",
@@ -138,7 +138,7 @@ dependencies = [
 
 [[package]]
 name = "ares-launch"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ares-connection-lib",
  "ares-device-lib",
@@ -150,7 +150,7 @@ dependencies = [
 
 [[package]]
 name = "ares-novacom"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ares-connection-lib",
  "ares-device-lib",
@@ -161,7 +161,7 @@ dependencies = [
 
 [[package]]
 name = "ares-package"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ar",
  "clap",
@@ -177,7 +177,7 @@ dependencies = [
 
 [[package]]
 name = "ares-pull"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ares-connection-lib",
  "ares-device-lib",
@@ -186,7 +186,7 @@ dependencies = [
 
 [[package]]
 name = "ares-push"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ares-connection-lib",
  "ares-device-lib",
@@ -197,7 +197,7 @@ dependencies = [
 
 [[package]]
 name = "ares-setup-device"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ares-device-lib",
  "clap",
@@ -206,7 +206,7 @@ dependencies = [
 
 [[package]]
 name = "ares-shell"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "ares-connection-lib",
  "ares-device-lib",
