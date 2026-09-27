@@ -21,9 +21,12 @@ Options:
   -h, --help             Print help
 ```
 
-Without `--run`, you get an interactive shell. With `--run`, the command output
-goes to stdout, so you can pipe it. Use `--pty` to force a terminal anyway, or
-`--no-pty` to turn one off.
+Without `--run`, you get an interactive shell, with a pseudo-terminal when
+stdout is a terminal. With `--run`, the command runs without a pseudo-terminal,
+like `ssh host command`: its stdout and stderr stay apart and its output is
+byte-for-byte what it wrote, so you can pipe it either way. Use `--pty` to get
+a terminal anyway, for a command that needs one such as `top`, or `--no-pty` to
+turn one off for the shell.
 
 ## Without a pseudo-terminal
 
@@ -64,5 +67,6 @@ Two things a pseudo-terminal would give you that this cannot:
 ```sh
 ares-shell -d tv
 ares-shell -d tv --run 'cat /etc/starfish-release'
-ares-shell -d tv --no-pty --run 'ls -l /media/developer' > files.txt
+ares-shell -d tv --run 'ls -l /media/developer' > files.txt
+ares-shell -d tv --pty --run top
 ```
