@@ -10,7 +10,9 @@ use crate::io::{io_error, spawn_stdin_reader};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
 
-pub(crate) fn shell(ch: Channel) -> Result<i32, Error> {
+/// `normalize_cr` is for a person typing; piped input goes through untouched,
+/// since it may be a file being copied to the device.
+pub(crate) fn shell(ch: Channel, normalize_cr: bool) -> Result<i32, Error> {
     let stdin_rx = spawn_stdin_reader();
     let ticker = tick(POLL_INTERVAL);
 
@@ -32,7 +34,11 @@ pub(crate) fn shell(ch: Channel) -> Result<i32, Error> {
                     Ok(bytes) => {
                         // Without a remote PTY there is no line discipline to
                         // translate carriage returns, so normalize them here.
-                        let bytes = crlf_to_lf(&bytes, &mut pending_cr);
+                        let bytes = if normalize_cr {
+                            crlf_to_lf(&bytes, &mut pending_cr)
+                        } else {
+                            bytes
+                        };
                         let mut stdin = ch.stdin();
                         stdin.write_all(&bytes)?;
                         stdin.flush()?;

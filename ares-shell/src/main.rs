@@ -50,8 +50,11 @@ fn main() {
     let session = fail(device.new_session(), &format!("connect to {}", device.name));
     let ch = fail(session.new_channel(), "open a channel");
     fail(ch.open_session(), "open a session");
+    let run_command = cli.run.is_some();
+    // Like ssh, a one-off command gets a pty only when asked for: a pty merges
+    // stderr into stdout, turns LF into CRLF and puts the local terminal in raw mode.
     let mut has_pty = false;
-    if !cli.no_pty && (cli.pty || stdout().is_tty()) {
+    if !cli.no_pty && (cli.pty || (!run_command && stdout().is_tty())) {
         let (width, height) = terminal::size().unwrap_or((80, 24));
         let term = std::env::var("TERM").unwrap_or_else(|_| String::from("xterm"));
         if let Err(e) = ch.request_pty(&term, u32::from(width), u32::from(height)) {
@@ -66,7 +69,6 @@ fn main() {
             has_pty = true;
         }
     }
-    let run_command = cli.run.is_some();
     if let Some(command) = cli.run {
         fail(ch.request_exec(&command), "run the command");
     } else {
@@ -81,7 +83,7 @@ fn main() {
     } else if local_prompt {
         interactive::shell(ch, &device)
     } else {
-        dumb::shell(ch)
+        dumb::shell(ch, stdin().is_tty())
     };
     match result {
         Ok(code) => exit(code),

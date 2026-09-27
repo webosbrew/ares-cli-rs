@@ -64,7 +64,7 @@ pub(crate) fn shell(ch: Channel, device: &Device) -> Result<i32, Error> {
         Stop::Eof | Stop::Aborted => return Ok(exit_status(&ch)),
         Stop::Timeout => {
             eprintln!("This shell can't report its state, so there is no prompt.");
-            return dumb::shell(ch);
+            return dumb::shell(ch, true);
         }
     };
 
