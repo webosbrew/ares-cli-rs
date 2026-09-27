@@ -48,8 +48,12 @@ fn main() {
     };
 
     let session = fail(device.new_session(), &format!("connect to {}", device.name));
-    let ch = fail(session.new_channel(), "open a channel");
-    fail(ch.open_session(), "open a session");
+    let open = || {
+        let ch = fail(session.new_channel(), "open a channel");
+        fail(ch.open_session(), "open a session");
+        ch
+    };
+    let mut ch = open();
     let run_command = cli.run.is_some();
     // Like ssh, a one-off command gets a pty only when asked for: a pty merges
     // stderr into stdout, turns LF into CRLF and puts the local terminal in raw mode.
@@ -65,6 +69,9 @@ fn main() {
                 exit(255);
             }
             eprintln!("PTY is not available, using dumb shell instead.");
+            // Some servers refuse every later request on a channel once they
+            // have refused its pty, the shell included. Start over on a new one.
+            ch = open();
         } else {
             has_pty = true;
         }
