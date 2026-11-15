@@ -1,15 +1,14 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::io::Error as IoError;
 use std::ops::Deref;
-use std::time::Duration;
-
-use ares_device_lib::{Device, FileTransfer, PrivateKey};
-use libssh_rs::{AuthStatus, Error as SshError, Session, SshKey, SshOption};
 #[cfg(unix)]
 use std::os::fd::{AsRawFd, BorrowedFd};
 #[cfg(windows)]
 use std::os::windows::io::{AsRawSocket, BorrowedSocket};
+use std::time::Duration;
 
+use ares_device_lib::{Device, FileTransfer, PrivateKey};
+use libssh_rs::{AuthStatus, Error as SshError, Session, SshKey, SshOption};
 use socket2::{SockRef, TcpKeepalive};
 
 pub trait NewSession {
