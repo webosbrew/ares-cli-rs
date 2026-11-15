@@ -12,6 +12,7 @@ use std::thread::sleep;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{fs, process};
 
+use ares_connection_lib::exec::Exec;
 use ares_connection_lib::session::DeviceSession;
 use ares_connection_lib::transfer::{PathKind, Transfer};
 use clap::ValueEnum;
@@ -117,6 +118,55 @@ fn remote_path(dir: &str, seq: u32) -> String {
     format!("{dir}/ares-do-{}-{seq}-{nanos:08x}.png", process::id())
 }
 
+/// A staged capture older than this belongs to a run that is gone.
+///
+/// A TV is shared, so several runs may be capturing into the same directory at
+/// once. A live run holds its file for seconds — the capture, at most
+/// [`APPEAR_TIMEOUT`] waiting for it, one transfer — so anything this old was
+/// abandoned, and anything younger may be another run's file mid-capture.
+const STALE_MINUTES: u32 = 5;
+
+/// The command that removes abandoned captures from `dir`, whichever run left
+/// them.
+///
+/// `find` on webOS is busybox. `-maxdepth`, `-mmin` and `-exec … +` all work
+/// from 1.20.2, the oldest busybox seen on a set. The trailing slash makes a
+/// symlinked directory count as the directory it points at.
+fn sweep_command(dir: &str) -> String {
+    let dir = format!("{}/", dir.trim_end_matches('/'));
+    format!(
+        "find {} -maxdepth 1 -name 'ares-do-*.png' -mmin +{STALE_MINUTES} -exec rm -f {{}} +",
+        shell_quote(&dir)
+    )
+}
+
+/// Quote one word for a POSIX shell: single quotes, with any single quote
+/// inside closed, escaped and reopened.
+fn shell_quote(word: &str) -> String {
+    format!("'{}'", word.replace('\'', r"'\''"))
+}
+
+/// Remove what interrupted runs left in `dir`. Best effort: a failure is
+/// traced, never fatal.
+///
+/// `Drop` does not run on Ctrl-C, so a killed run can leave its staged PNG
+/// behind, and `/tmp` on a TV is a small tmpfs. Sweeping when a directory is
+/// first used, rather than trapping a signal, keeps this dependency-free.
+pub(crate) fn sweep_stale(
+    session: &DeviceSession,
+    dir: &str,
+    timeout: Option<Duration>,
+    reporter: &Reporter,
+) {
+    let command = sweep_command(dir);
+    reporter.trace(&command);
+    match session.session.exec_timeout(&command, timeout) {
+        Ok(output) if output.success() => {}
+        Ok(output) => reporter.trace(&format!("could not sweep {dir}: {}", output.complaint())),
+        Err(e) => reporter.trace(&format!("could not sweep {dir}: {e}")),
+    }
+}
+
 /// Is this a complete PNG, rather than a truncated one or an error page?
 ///
 /// The capture service reports success before the file is finished, so reading
@@ -134,29 +184,31 @@ pub(crate) struct CaptureResult {
     pub service: &'static str,
 }
 
-/// Which capture service answered last time, so a flow of twenty shots does
-/// not pay for the fallback twenty times.
+/// What one screenshot asks for. Unlike [`Capturer`], this changes per shot.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ShotRequest<'a> {
+    pub method: CaptureMethod,
+    /// Where on the device to stage the PNG.
+    pub remote_dir: &'a str,
+    /// Further attempts when the file comes back incomplete.
+    pub retries: u8,
+}
+
+/// What capturing has learned so far in this run.
+///
+/// Lives as long as the run, not a single shot: it remembers which capture
+/// service answered, so a flow of twenty shots does not pay for the fallback
+/// twenty times, and it numbers staged files across the whole run.
 pub(crate) struct Capturer {
-    method: CaptureMethod,
     timeout: Option<Duration>,
-    remote_dir: String,
-    retries: u8,
     known_uri: Option<&'static str>,
     seq: u32,
 }
 
 impl Capturer {
-    pub(crate) fn new(
-        method: CaptureMethod,
-        remote_dir: String,
-        retries: u8,
-        timeout: Option<Duration>,
-    ) -> Self {
+    pub(crate) fn new(timeout: Option<Duration>) -> Self {
         Capturer {
-            method,
             timeout,
-            remote_dir,
-            retries,
             known_uri: None,
             seq: 0,
         }
@@ -168,11 +220,12 @@ impl Capturer {
         session: &DeviceSession,
         uri: &'static str,
         path: &str,
+        method: CaptureMethod,
         reporter: &Reporter,
     ) -> Result<(), DoError> {
         let payload = json!({
             "path": path,
-            "method": self.method.as_luna(),
+            "method": method.as_luna(),
             "format": "PNG",
         });
         let reply: LunaReply = luna::raw(&session.session, uri, &payload, self.timeout, reporter)?;
@@ -181,21 +234,23 @@ impl Capturer {
 
     /// Ask whichever service exists, remembering which one that was.
     ///
-    /// The retry is on *any* failure of the first URI, not on a particular
-    /// error string: `LunaError` collapses "no such service" and "no
-    /// permission" into one value, so there is no message to match on.
+    /// The retry is on almost any failure of the first URI rather than on a
+    /// particular error: whether a missing service shows up as a non-zero
+    /// exit, an unparseable reply or `returnValue: false` varies by firmware.
+    /// See [`luna::is_worth_retrying_elsewhere`].
     fn request_either(
         &mut self,
         session: &DeviceSession,
         path: &str,
+        method: CaptureMethod,
         reporter: &Reporter,
     ) -> Result<&'static str, DoError> {
         if let Some(uri) = self.known_uri {
-            self.request(session, uri, path, reporter)?;
+            self.request(session, uri, path, method, reporter)?;
             return Ok(uri);
         }
 
-        match self.request(session, CAPTURE_URI, path, reporter) {
+        match self.request(session, CAPTURE_URI, path, method, reporter) {
             Ok(()) => {
                 self.known_uri = Some(CAPTURE_URI);
                 Ok(CAPTURE_URI)
@@ -204,7 +259,7 @@ impl Capturer {
                 reporter.trace(&format!(
                     "{CAPTURE_URI} failed ({first}); trying {TV_CAPTURE_URI}"
                 ));
-                self.request(session, TV_CAPTURE_URI, path, reporter)
+                self.request(session, TV_CAPTURE_URI, path, method, reporter)
                     .map_err(|second| {
                         DoError::Capture(format!(
                             "neither capture service worked.\n  {CAPTURE_URI}: {first}\n  \
@@ -246,13 +301,14 @@ impl Capturer {
         &mut self,
         session: &DeviceSession,
         transfer: &Transfer<'_>,
+        shot: ShotRequest<'_>,
         reporter: &Reporter,
     ) -> Result<CaptureResult, DoError> {
         let mut last: Option<DoError> = None;
 
-        for attempt in 0..=self.retries {
+        for attempt in 0..=shot.retries {
             self.seq += 1;
-            let path = remote_path(&self.remote_dir, self.seq);
+            let path = remote_path(shot.remote_dir, self.seq);
             // Registered before the call, so a failure anywhere below still
             // takes the file with it.
             let mut temp = RemoteTemp {
@@ -262,7 +318,7 @@ impl Capturer {
                 armed: false,
             };
 
-            let service = self.request_either(session, &path, reporter)?;
+            let service = self.request_either(session, &path, shot.method, reporter)?;
             temp.arm();
             Self::wait_for_file(transfer, &path)?;
 
@@ -272,7 +328,7 @@ impl Capturer {
             if is_whole_png(&bytes) {
                 return Ok(CaptureResult {
                     bytes,
-                    method: self.method,
+                    method: shot.method,
                     service: service
                         .trim_start_matches("luna://")
                         .split('/')
@@ -288,7 +344,7 @@ impl Capturer {
             } else {
                 format!("the file was not a PNG ({} bytes)", bytes.len())
             };
-            if attempt < self.retries {
+            if attempt < shot.retries {
                 reporter.trace(&format!("{complaint}; retrying"));
             }
             last = Some(DoError::Capture(complaint));
@@ -336,7 +392,26 @@ fn temp_sibling(path: &Path) -> PathBuf {
 mod tests {
     use std::path::Path;
 
-    use super::{CaptureMethod, PNG_MAGIC, is_whole_png, remote_path, temp_sibling};
+    use super::{
+        CaptureMethod, PNG_MAGIC, is_whole_png, remote_path, shell_quote, sweep_command,
+        temp_sibling,
+    };
+
+    #[test]
+    fn the_sweep_takes_any_runs_stale_files_and_nothing_else() {
+        assert_eq!(
+            sweep_command("/tmp"),
+            "find '/tmp/' -maxdepth 1 -name 'ares-do-*.png' -mmin +5 -exec rm -f {} +"
+        );
+        assert_eq!(sweep_command("/tmp/"), sweep_command("/tmp"));
+    }
+
+    #[test]
+    fn a_remote_dir_cannot_break_out_of_its_quotes() {
+        assert_eq!(shell_quote("/media/a b"), "'/media/a b'");
+        assert_eq!(shell_quote("/x'; rm -rf /; '"), r"'/x'\''; rm -rf /; '\'''");
+        assert!(sweep_command("/a'b").starts_with(r"find '/a'\''b/' "));
+    }
 
     fn png(body: &[u8]) -> Vec<u8> {
         let mut v = PNG_MAGIC.to_vec();

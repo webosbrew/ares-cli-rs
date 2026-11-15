@@ -116,6 +116,9 @@ impl Exec for Session {
         let ch = self.new_channel()?;
         ch.open_session()?;
         ch.request_exec(command)?;
+        // Nothing is ever written to the command's stdin, so say so. A command
+        // that reads it would otherwise wait for input until the deadline.
+        ch.send_eof()?;
 
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();

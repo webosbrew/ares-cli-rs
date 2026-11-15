@@ -106,7 +106,10 @@ service exists at all.
 `exec 'test -f /var/log/x'` asserts the way you would expect. This is the one
 place `ares-do` does not use its own exit-code table — the same choice
 `ares-shell` makes, for the same reason. Under `--json` the status is also in
-the `exitCode` field, which removes the ambiguity.
+the `exitCode` field, which removes the ambiguity. The command's stdout goes to
+stdout and its stderr to stderr; under `--json` both are in the event, as
+`stdout` and `stderr`. Its stdin is closed, so a command that reads it sees
+end-of-file rather than waiting.
 
 ## Timeouts
 
@@ -125,7 +128,7 @@ forever.
 
 ```console
 $ ares-do -d tv --timeout 3s exec 'sleep 300'
-Timed out waiting for `sleep 300` to finish
+`sleep 300` did not finish within 3s
 $ echo $?
 9
 ```
@@ -358,8 +361,11 @@ second, with the winner remembered for the rest of the run.
 If the capture service cannot write to `/tmp` on your firmware, point
 `--remote-dir` somewhere it can, such as `/media/developer/temp`.
 
-`Drop` does not run on Ctrl-C, so an interrupted run can leave a
-`/tmp/ares-do-*.png` behind. Each run sweeps its own leftovers on the way in.
+`Drop` does not run on Ctrl-C, so an interrupted run can leave an
+`ares-do-*.png` behind in the staging directory. The first capture into a
+directory in each run deletes any such file there that is more than five
+minutes old, whichever run left it. Younger files are left alone, because
+another run on the same TV may be capturing into the same directory.
 
 ## Regenerating the key table
 

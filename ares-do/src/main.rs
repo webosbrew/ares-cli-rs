@@ -74,7 +74,6 @@ fn dispatch(cli: &Cli, reporter: &Reporter) -> Result<(), DoError> {
     let timeout = (!cli.timeout.is_zero()).then_some(cli.timeout);
 
     session.require_root(cli.allow_non_root, timeout, reporter)?;
-    run::sweep_leftovers(&session, timeout, reporter);
 
     Runner::new(&session, timeout, reporter).one(&cli.command)
 }

@@ -4,6 +4,7 @@
 //! probe, one file-transfer channel, however many steps. Spawning a process
 //! per key would spend most of the wall clock on handshakes.
 
+use std::collections::HashSet;
 use std::fmt::Write as _;
 use std::fs;
 use std::io::{IsTerminal, Read, stdin, stdout};
@@ -26,7 +27,7 @@ use crate::key::SendKey;
 use crate::keycode;
 use crate::luna::{self, LunaReply};
 use crate::output::{Reporter, Timer};
-use crate::screenshot::{Capturer, ShotTarget, write_shot};
+use crate::screenshot::{self, Capturer, ShotRequest, ShotTarget, write_shot};
 use crate::text::TypeText;
 
 /// Everything a step needs that does not come from the step itself.
@@ -38,6 +39,10 @@ pub(crate) struct Runner<'a> {
     timeout: Option<Duration>,
     /// Set only while running a flow; a one-shot command has no output dir.
     flow: Option<FlowContext>,
+    /// Kept for the whole run, so it remembers which capture service answered.
+    capturer: Capturer,
+    /// Remote directories already swept of abandoned captures this run.
+    swept: HashSet<String>,
 }
 
 struct FlowContext {
@@ -59,6 +64,8 @@ impl<'a> Runner<'a> {
             reporter,
             timeout,
             flow: None,
+            capturer: Capturer::new(timeout),
+            swept: HashSet::new(),
         }
     }
 
@@ -178,10 +185,14 @@ impl<'a> Runner<'a> {
         if self.reporter.is_json() {
             self.reporter.event(&json!({
                 "event": "exec", "ok": output.exit_code == 0, "command": args.command,
-                "exitCode": output.exit_code, "stdout": output.stdout, "ms": timer.ms(),
+                "exitCode": output.exit_code, "stdout": output.stdout,
+                "stderr": output.stderr, "ms": timer.ms(),
             }));
         } else {
+            // Each stream to its own: the command's stdout is the data, and
+            // its stderr is usually the only explanation of a failure.
             print!("{}", output.stdout);
+            eprint!("{}", output.stderr);
         }
 
         if output.exit_code == 0 {
@@ -204,14 +215,23 @@ impl<'a> Runner<'a> {
             sleep(flow.settle);
         }
 
+        // Once per directory per run: the first capture into a directory pays
+        // for the sweep, the rest do not.
+        if self.swept.insert(args.remote_dir.clone()) {
+            screenshot::sweep_stale(self.session, &args.remote_dir, self.timeout, self.reporter);
+        }
+
         let timer = Timer::start();
-        let mut capturer = Capturer::new(
-            args.method,
-            args.remote_dir.clone(),
-            args.retries,
-            self.timeout,
-        );
-        let shot = capturer.capture(self.session, &self.transfer, self.reporter)?;
+        let shot = self.capturer.capture(
+            self.session,
+            &self.transfer,
+            ShotRequest {
+                method: args.method,
+                remote_dir: &args.remote_dir,
+                retries: args.retries,
+            },
+            self.reporter,
+        )?;
         write_shot(&target, &shot.bytes)?;
 
         let where_to = match &target {
@@ -475,18 +495,15 @@ pub(crate) fn dry_run(cli: &Cli, reporter: &Reporter) -> Result<(), DoError> {
                     }
                 }
             }
-            Command::Text(args) => match crate::text::text_to_keys(&args.text, args.lower) {
-                Ok(keys) => {
-                    for key in keys {
-                        lines.push(format!(
-                            "{} {{\"keyCode\":{}}}   # {key}",
-                            crate::key::SEND_KEY_URI,
-                            key.code
-                        ));
-                    }
+            Command::Text(args) => {
+                for key in crate::text::text_to_keys(&args.text, args.lower)? {
+                    lines.push(format!(
+                        "{} {{\"keyCode\":{}}}   # {key}",
+                        crate::key::SEND_KEY_URI,
+                        key.code
+                    ));
                 }
-                Err(e) => return Err(e),
-            },
+            }
             Command::Screenshot(args) => {
                 let named = args.file.as_deref().filter(|f| *f != "-");
                 let where_to = if matches!(cli.command, Command::Run(_)) {
@@ -565,24 +582,4 @@ pub(crate) fn list_keys(pattern: Option<&str>, all: bool, reporter: &Reporter) {
         out.push('\n');
     }
     print!("{out}");
-}
-
-/// Best-effort sweep of anything a killed run left on the device.
-///
-/// `Drop` does not run on Ctrl-C, so a previous run's temp file can outlive
-/// it. Cleaning at the start rather than trapping a signal keeps this
-/// dependency-free.
-pub(crate) fn sweep_leftovers(
-    session: &DeviceSession,
-    timeout: Option<Duration>,
-    reporter: &Reporter,
-) {
-    let pattern = format!("/tmp/ares-do-{}-*.png", std::process::id());
-    if let Ok(output) = session
-        .session
-        .exec_timeout(&format!("rm -f {pattern}"), timeout)
-        && output.exit_code != 0
-    {
-        reporter.trace(&format!("could not sweep {pattern}"));
-    }
 }
