@@ -133,9 +133,10 @@ fn fix_devices_json_perm(path: PathBuf) -> Result<(), Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::fs::{create_dir_all, remove_dir_all, write};
     use std::sync::atomic::{AtomicU32, Ordering};
+
+    use super::*;
 
     fn temp_dir(label: &str) -> PathBuf {
         static COUNTER: AtomicU32 = AtomicU32::new(0);

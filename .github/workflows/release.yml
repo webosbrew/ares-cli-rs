@@ -8,8 +8,8 @@ on:
 env:
   # Every binary that goes into a release archive.
   BINS: >-
-    ares-device ares-install ares-launch ares-novacom ares-package
-    ares-pull ares-push ares-setup-device ares-shell
+    ares-device ares-do ares-install ares-launch ares-novacom
+    ares-package ares-pull ares-push ares-setup-device ares-shell
 
 jobs:
   # One archive per platform, with all tools inside.
