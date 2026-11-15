@@ -96,8 +96,11 @@ after a `rustup` install.
 
 ### Build dependencies
 
-- **Linux**: `pkg-config`, `libssl-dev` and `libgtk-3-dev`
-  (GTK is only for the `ares-device` device picker).
+- **Linux**: `pkg-config`, `libssl-dev` and `libgtk-4-dev`
+  (GTK is only for the `ares-device` device picker). To use GTK 3 instead,
+  build `ares-device` with `--no-default-features --features gtk3` and install
+  `libgtk-3-dev`; with `--no-default-features` alone it needs no GTK and has
+  no picker.
 - **macOS**: Xcode command line tools. OpenSSL is built from source, so
   Homebrew is not needed.
 - **Windows**: MSVC build tools, and [Strawberry Perl](https://strawberryperl.com/)

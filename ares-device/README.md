@@ -20,6 +20,14 @@ Options:
 `-d` with no value opens a graphical picker. The picker is native on Windows and
 uses GTK on other systems, except macOS, where it is not available yet.
 
+The GTK version is chosen when building. GTK 4 is the default; the `gtk3`
+feature selects GTK 3, and building with neither leaves the picker out:
+
+```sh
+cargo install --locked --path ares-device --no-default-features --features gtk3
+cargo install --locked --path ares-device --no-default-features
+```
+
 ## Examples
 
 ```sh
