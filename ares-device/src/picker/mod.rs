@@ -6,8 +6,10 @@ cfg_if::cfg_if! {
     if #[cfg(target_os="windows")] {
         mod windows;
     } else if #[cfg(target_os = "macos")] {
-    } else {
-        mod gtk;
+    } else if #[cfg(feature = "gtk4")] {
+        mod gtk4;
+    } else if #[cfg(feature = "gtk3")] {
+        mod gtk3;
     }
 }
 
@@ -21,6 +23,14 @@ pub enum DeviceSelection {
     Pick,
 }
 
+// Unused where there is no picker: macOS, or a build with neither GTK feature.
+#[cfg_attr(
+    not(any(
+        target_os = "windows",
+        all(not(target_os = "macos"), any(feature = "gtk4", feature = "gtk3"))
+    )),
+    allow(dead_code)
+)]
 trait PickPrompt: Default {
     fn pick<D: AsRef<Device>>(&self, devices: Vec<D>) -> Option<Device>;
 }
@@ -36,8 +46,12 @@ impl PickDevice for DeviceManager {
                         windows::PickPromptWindows::default().pick(devices)
                     } else if #[cfg(target_os = "macos")] {
                         None
+                    } else if #[cfg(feature = "gtk4")] {
+                        gtk4::PickPromptGtk4::default().pick(devices)
+                    } else if #[cfg(feature = "gtk3")] {
+                        gtk3::PickPromptGtk3::default().pick(devices)
                     } else {
-                        gtk::PickPromptGtk::default().pick(devices)
+                        None
                     }
                 }
             }

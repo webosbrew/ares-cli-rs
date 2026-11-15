@@ -26,9 +26,17 @@ cfg-if = "1.0.4"
 native-windows-gui = { version = "1.0.13" }
 native-windows-derive = "1.0.5"
 
-# The device picker uses GTK everywhere except Windows and macOS.
+# The device picker uses GTK everywhere except Windows and macOS. The features
+# choose which GTK; with both on, GTK 4 wins, and with neither the picker
+# finds nothing, as on macOS.
 [target.'cfg(all(not(target_os="windows"), not(target_os="macos")))'.dependencies]
-gtk = "0.18.2"
+gtk4 = { version = "0.11.5", optional = true }
+gtk = { version = "0.18.2", optional = true }
+
+[features]
+default = ["gtk4"]
+gtk4 = ["dep:gtk4"]
+gtk3 = ["dep:gtk"]
 
 [build-dependencies]
 embed-manifest = "1.5.0"

@@ -2,14 +2,17 @@ use std::sync::{Arc, Mutex};
 
 use ares_device_lib::Device;
 use gtk::prelude::*;
-use gtk::{Align, Application, ApplicationWindow, Button, Label, ListBox, ListBoxRow, Orientation};
+use gtk::{
+    Adjustment, Align, Application, ApplicationWindow, Button, Label, ListBox, ListBoxRow,
+    Orientation, PolicyType, ScrolledWindow,
+};
 
 use crate::picker::PickPrompt;
 
 #[derive(Default)]
-pub struct PickPromptGtk {}
+pub struct PickPromptGtk3 {}
 
-impl PickPrompt for PickPromptGtk {
+impl PickPrompt for PickPromptGtk3 {
     fn pick<D: AsRef<Device>>(&self, devices: Vec<D>) -> Option<Device> {
         let app = Application::new(Some("com.ares.devicePickPrompt"), Default::default());
         let items: Vec<Device> = devices.iter().map(|d| d.as_ref().clone()).collect();
@@ -40,8 +43,8 @@ impl PickPrompt for PickPromptGtk {
                     selected_row = index as i32;
                 }
             }
-            list.select_row(list.row_at_index(selected_row).as_ref());
-            list.set_vexpand(true);
+            let default_row = list.row_at_index(selected_row);
+            list.select_row(default_row.as_ref());
             list.set_activate_on_single_click(false);
             let index = ui_selected.clone();
             list.connect_row_selected(move |_, selected| {
@@ -57,7 +60,14 @@ impl PickPrompt for PickPromptGtk {
                 });
             }
 
-            content.add(&list);
+            // Scrolls inside the window's fixed height, however many devices
+            // there are.
+            let scroller = ScrolledWindow::new(None::<&Adjustment>, None::<&Adjustment>);
+            scroller.set_policy(PolicyType::Never, PolicyType::Automatic);
+            scroller.set_vexpand(true);
+            scroller.add(&list);
+            list.set_focus_vadjustment(&scroller.vadjustment());
+            content.add(&scroller);
 
             let buttons = gtk::Box::new(Orientation::Horizontal, 5);
             let ok = Button::with_label("OK");
@@ -90,6 +100,10 @@ impl PickPrompt for PickPromptGtk {
             window.add(&content);
 
             window.show_all();
+            // Focusing the default row scrolls it into view.
+            if let Some(row) = default_row {
+                row.grab_focus();
+            }
         });
         app.run_with_args::<&str>(&[]);
 
