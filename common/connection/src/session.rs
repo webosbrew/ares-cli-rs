@@ -1,15 +1,18 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::io::Error as IoError;
+use std::net::{SocketAddr, TcpStream};
 use std::ops::Deref;
 #[cfg(unix)]
-use std::os::fd::{AsRawFd, BorrowedFd};
+use std::os::fd::{AsRawFd, BorrowedFd, IntoRawFd};
 #[cfg(windows)]
-use std::os::windows::io::{AsRawSocket, BorrowedSocket};
+use std::os::windows::io::{AsRawSocket, BorrowedSocket, IntoRawSocket};
 use std::time::Duration;
 
 use ares_device_lib::{Device, FileTransfer, PrivateKey};
 use libssh_rs::{AuthStatus, Error as SshError, Session, SshKey, SshOption};
 use socket2::{SockRef, TcpKeepalive};
+
+use crate::net::connect_host;
 
 pub trait NewSession {
     fn new_session(&self) -> Result<DeviceSession, SessionError>;
@@ -26,13 +29,53 @@ pub trait NewSession {
 /// Returns the libssh error if an option is rejected or the device cannot be
 /// reached.
 pub fn connect(device: &Device) -> Result<Session, SessionError> {
+    let session = new_device_session(device)?;
+    session.connect()?;
+    keep_alive(&session);
+    Ok(session)
+}
+
+/// Like [`connect`], but open the TCP connection through `open` instead of
+/// letting libssh open it. See [`crate::net`] for what `open` is for.
+///
+/// The session owns the socket from here on. libssh closes it when the session
+/// is dropped. It does not close it on [`Session::disconnect`], so drop the
+/// session instead of disconnecting it.
+///
+/// # Errors
+///
+/// Returns the I/O error if no address of the device connects, or the libssh
+/// error if an option is rejected or the SSH handshake fails.
+pub fn connect_with<F>(device: &Device, open: F) -> Result<Session, SessionError>
+where
+    F: Fn(&SocketAddr, Duration) -> Result<TcpStream, IoError>,
+{
+    let stream = connect_host(&device.host, device.port, CONNECT_TIMEOUT, open)?;
+    let session = new_device_session(device)?;
+    #[cfg(unix)]
+    session.set_option(SshOption::Socket(stream.as_raw_fd()))?;
+    #[cfg(windows)]
+    session.set_option(SshOption::Socket(stream.as_raw_socket()))?;
+    // libssh holds the socket now, so the stream must not close it.
+    #[cfg(unix)]
+    let _ = stream.into_raw_fd();
+    #[cfg(windows)]
+    let _ = stream.into_raw_socket();
+    session.connect()?;
+    keep_alive(&session);
+    Ok(session)
+}
+
+/// How long [`configure_session`] lets libssh wait. [`connect_with`] waits as
+/// long for the TCP connection.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+
+fn new_device_session(device: &Device) -> Result<Session, SshError> {
     let session = Session::new()?;
     configure_session(&session)?;
     session.set_option(SshOption::Hostname(device.host.clone()))?;
     session.set_option(SshOption::Port(device.port))?;
     session.set_option(SshOption::User(Some(device.username.clone())))?;
-    session.connect()?;
-    keep_alive(&session);
     Ok(session)
 }
 
@@ -153,7 +196,7 @@ pub fn configure_session(session: &Session) -> Result<(), SshError> {
         "rsa-sha2-256",
         "ssh-rsa",
     ];
-    session.set_option(SshOption::Timeout(Duration::from_secs(10)))?;
+    session.set_option(SshOption::Timeout(CONNECT_TIMEOUT))?;
     session.set_option(SshOption::KeyExchange(kex.join(",")))?;
     session.set_option(SshOption::HmacCS(hmac.join(",")))?;
     session.set_option(SshOption::HmacSC(hmac.join(",")))?;
@@ -260,5 +303,69 @@ impl From<SshError> for SessionError {
 impl From<IoError> for SessionError {
     fn from(value: IoError) -> Self {
         SessionError::Io(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::TcpListener;
+    use std::thread;
+
+    use super::*;
+
+    fn device(host: &str, port: u16) -> Device {
+        Device {
+            order: None,
+            default: None,
+            profile: String::from("ose"),
+            name: String::from("tv"),
+            description: None,
+            host: String::from(host),
+            port,
+            username: String::from("prisoner"),
+            new: false,
+            private_key: None,
+            files: None,
+            passphrase: None,
+            password: None,
+            log_daemon: None,
+            no_port_forwarding: None,
+            indelible: None,
+        }
+    }
+
+    #[test]
+    fn connect_with_speaks_ssh_over_the_opened_socket() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let server_address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream.write_all(b"SSH-2.0-OpenSSH_test\r\n").unwrap();
+            let mut banner = String::new();
+            BufReader::new(stream).read_line(&mut banner).unwrap();
+            banner
+        });
+        // 192.0.2.1 is reserved for documentation and leads nowhere, so the
+        // handshake reaches the server only through the socket `open` returns.
+        let result = connect_with(&device("192.0.2.1", 9922), |address, timeout| {
+            assert_eq!(*address, "192.0.2.1:9922".parse().unwrap());
+            TcpStream::connect_timeout(&server_address, timeout)
+        });
+        let banner = server.join().unwrap();
+        assert!(banner.starts_with("SSH-2.0-libssh"), "{banner:?}");
+        // The server hangs up after the banners, so the handshake fails.
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn connect_with_returns_the_open_error() {
+        let result = connect_with(&device("192.0.2.1", 9922), |_, _| {
+            Err(IoError::from(std::io::ErrorKind::ConnectionRefused))
+        });
+        assert!(matches!(
+            result,
+            Err(SessionError::Io(e)) if e.kind() == std::io::ErrorKind::ConnectionRefused
+        ));
     }
 }
