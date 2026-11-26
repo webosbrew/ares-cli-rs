@@ -1,5 +1,5 @@
 use std::io::{Error, ErrorKind, Read, Write};
-use std::net::{TcpStream, ToSocketAddrs};
+use std::net::{SocketAddr, TcpStream};
 use std::time::Duration;
 
 use ares_device_lib::DeviceManager;
@@ -7,6 +7,7 @@ use httparse::{Response, Status};
 use libssh_rs::SshKey;
 
 use crate::DeviceSetupManager;
+use crate::net::connect_host;
 
 /// The port the key server on a device in developer mode listens on.
 pub const NOVACOM_KEY_PORT: u16 = 9991;
@@ -38,6 +39,19 @@ const MAX_REDIRECTS: usize = 5;
 /// response is not HTTP, a redirect leaves the host, or the final status is not
 /// 200.
 pub fn fetch_key(host: &str, port: u16) -> Result<String, Error> {
+    fetch_key_with(host, port, TcpStream::connect_timeout)
+}
+
+/// Like [`fetch_key`], but open each connection through `open`. See
+/// [`crate::net`] for what `open` is for.
+///
+/// # Errors
+///
+/// The same as [`fetch_key`].
+pub fn fetch_key_with<F>(host: &str, port: u16, open: F) -> Result<String, Error>
+where
+    F: Fn(&SocketAddr, Duration) -> Result<TcpStream, Error>,
+{
     let mut target = Target {
         host: host
             .trim_start_matches('[')
@@ -47,7 +61,7 @@ pub fn fetch_key(host: &str, port: u16) -> Result<String, Error> {
         path: "/webos_rsa".to_string(),
     };
     for _ in 0..=MAX_REDIRECTS {
-        match get(&target)? {
+        match get(&target, &open)? {
             Reply::Body(body) => return Ok(String::from_utf8_lossy(&body).into_owned()),
             Reply::Redirect(location) => target = target.redirect(&location)?,
         }
@@ -182,17 +196,11 @@ struct Head {
 ///
 /// The body is read up to where its framing says it ends, so a server that
 /// keeps the connection open does not stall the read.
-fn get(target: &Target) -> Result<Reply, Error> {
-    let address = (target.host.as_str(), target.port)
-        .to_socket_addrs()?
-        .next()
-        .ok_or_else(|| {
-            Error::new(
-                ErrorKind::NotFound,
-                format!("Can't resolve {}", target.host),
-            )
-        })?;
-    let mut stream = TcpStream::connect_timeout(&address, TIMEOUT)?;
+fn get<F>(target: &Target, open: &F) -> Result<Reply, Error>
+where
+    F: Fn(&SocketAddr, Duration) -> Result<TcpStream, Error>,
+{
+    let mut stream = connect_host(&target.host, target.port, TIMEOUT, open)?;
     stream.set_read_timeout(Some(TIMEOUT))?;
     stream.set_write_timeout(Some(TIMEOUT))?;
     let request = format!(

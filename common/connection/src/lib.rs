@@ -2,6 +2,7 @@ use std::io::Error;
 
 pub mod exec;
 pub mod luna;
+pub mod net;
 pub mod session;
 pub mod setup;
 pub mod transfer;
